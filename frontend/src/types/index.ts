@@ -36,31 +36,29 @@ export interface User {
   updatedAt: string;
 }
 
-// Bill Types
+// Bill Types - Backend DTO'lara uygun
 export interface Bill {
-  id: number;
+  billId: number;
   userId: number;
-  period: string;
+  periodStart: string;
+  periodEnd: string;
+  issueDate: string;
   totalAmount: number;
-  taxAmount: number;
-  netAmount: number;
-  dueDate: string;
-  status: string;
+  currency: string;
   items: BillItem[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface BillItem {
-  id: number;
+  itemId: number;
   billId: number;
   category: string;
+  subtype: string;
   description: string;
-  quantity: number;
+  amount: number;
   unitPrice: number;
-  totalPrice: number;
+  quantity: number;
   taxRate: number;
-  taxAmount: number;
+  createdAt: string;
 }
 
 export interface BillSummary {
@@ -70,6 +68,9 @@ export interface BillSummary {
   netAmount: number;
   itemCount: number;
   categoryBreakdown: CategoryBreakdown[];
+  usageBasedCharges: number;
+  oneTimeCharges: number;
+  savingsHint: string;
 }
 
 export interface CategoryBreakdown {
@@ -78,31 +79,32 @@ export interface CategoryBreakdown {
   percentage: number;
 }
 
-// Catalog Types
+// Catalog Types - Backend DTO'lara uygun
 export interface Plan {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  dataLimit: string;
-  voiceLimit: string;
-  smsLimit: string;
-  type: 'PREPAID' | 'POSTPAID';
-  features: string[];
+  planId: number;
+  planName: string;
+  planType: string;
+  quotaGb: number;
+  quotaMin: number;
+  quotaSms: number;
+  monthlyPrice: number;
+  overageGb: number;
+  overageMin: number;
+  overageSms: number;
 }
 
 export interface AddOnPack {
-  id: number;
-  name: string;
+  addonId: number;
+  addonName: string;
+  addonType: string;
   description: string;
   price: number;
-  type: 'DATA' | 'VOICE' | 'SMS' | 'VALUE';
   features: string[];
 }
 
 export interface VAS {
-  id: number;
-  name: string;
+  vasId: number;
+  vasName: string;
   description: string;
   price: number;
   type: string;
@@ -110,7 +112,7 @@ export interface VAS {
 }
 
 export interface PremiumSMS {
-  id: number;
+  premiumSmsId: number;
   name: string;
   description: string;
   price: number;
@@ -124,91 +126,129 @@ export interface CatalogResponse {
   premiumSMS: PremiumSMS[];
 }
 
-// Anomaly Types
+// Anomaly Types - Backend DTO'lara uygun
 export interface Anomaly {
-  id: number;
+  anomalyId: number;
   userId: number;
   billId: number;
-  type: 'UNUSUAL_USAGE' | 'PRICE_SPIKE' | 'UNEXPECTED_CHARGE';
-  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  type: string;
+  severity: string;
   description: string;
   detectedAt: string;
-  status: 'DETECTED' | 'INVESTIGATING' | 'RESOLVED';
+  status: string;
+  zScore: number;
+  percentageDifference: number;
+  recommendations: string[];
 }
 
 export interface AnomalyRequest {
   userId: number;
-  billId: number;
-  type: string;
-  description: string;
+  period: string;
 }
 
-// Usage Types
+// Usage Types - Backend DTO'lara uygun
 export interface UsageDaily {
   id: number;
   userId: number;
   date: string;
-  dataUsage: number;
-  voiceUsage: number;
-  smsUsage: number;
-  totalCost: number;
+  mbUsed: number;
+  minutesUsed: number;
+  smsUsed: number;
+  roamingMb: number;
 }
 
 export interface UsageSummary {
   userId: number;
   period: string;
-  totalDataUsage: number;
-  totalVoiceUsage: number;
-  totalSmsUsage: number;
+  dataUsage: number;
+  voiceUsage: number;
+  smsUsage: number;
+  roamingUsage: number;
   totalCost: number;
   dailyBreakdown: UsageDaily[];
 }
 
-// Simulation Types
+// Simulation Types - Backend DTO'lara uygun
 export interface SimulationRequest {
   userId: number;
-  currentPlanId: number;
-  newPlanId: number;
-  addOnIds: number[];
-  vasIds: number[];
+  period: string;
+  scenario: {
+    planId?: number;
+    addons?: number[];
+    disableVas?: boolean;
+    blockPremiumSms?: boolean;
+  };
 }
 
 export interface SimulationResponse {
-  currentCost: number;
-  newCost: number;
-  savings: number;
-  savingsPercentage: number;
+  currentTotal: number;
+  newTotal: number;
+  saving: number;
   details: {
     planChange: number;
     addOns: number;
     vas: number;
+    premiumSms: number;
   };
+  recommendations: string[];
 }
 
-// Checkout Types
+// Checkout Types - Backend DTO'lara uygun
 export interface CheckoutRequest {
   userId: number;
-  planId: number;
-  addOnIds: number[];
-  vasIds: number[];
-  action: 'ACTIVATE' | 'MODIFY' | 'CANCEL';
+  actions: CheckoutAction[];
+}
+
+export interface CheckoutAction {
+  type: 'CHANGE_PLAN' | 'ADD_ADDON' | 'CANCEL_VAS' | 'BLOCK_PREMIUM_SMS';
+  payload: any;
 }
 
 export interface CheckoutResponse {
   success: boolean;
   message: string;
-  orderId?: string;
-  totalCost?: number;
+  orderId: string;
+  totalCost: number;
 }
 
-// Explain Types
+// Explain Types - Backend DTO'lara uygun
 export interface ExplainRequest {
   billId: number;
-  question: string;
 }
 
 export interface ExplainResponse {
-  explanation: string;
+  summary: BillSummary;
+  breakdown: CategoryBreakdown[];
+  naturalLanguageSummary: string;
+}
+
+// Bonus Types - Backend DTO'lara uygun
+export interface CohortAnalysis {
+  userId: number;
+  period: string;
+  cohort: string;
+  similarUsers: number;
+  averageUsage: number;
+  recommendations: string[];
+}
+
+export interface TaxAnalysis {
+  billId: number;
+  totalTax: number;
+  taxBreakdown: {
+    category: string;
+    amount: number;
+    rate: number;
+  }[];
+}
+
+export interface AutofixRecommendation {
+  autofixId: number;
+  userId: number;
+  period: string;
+  currentCost: number;
+  recommendedCost: number;
+  savings: number;
+  actions: string[];
   confidence: number;
-  relatedItems: string[];
 }

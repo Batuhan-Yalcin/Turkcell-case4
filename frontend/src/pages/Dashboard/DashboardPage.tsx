@@ -1,549 +1,870 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Box,
+  Container,
+  Paper,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  Box,
+  CardActions,
+  Button,
   Chip,
-  LinearProgress,
-  IconButton,
   Avatar,
+  IconButton,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  CircularProgress,
+  Alert,
+  Divider,
   useTheme,
   Fade,
   Grow,
-  Alert,
+  LinearProgress,
+  Badge,
 } from '@mui/material';
+
 import {
-  Receipt,
+  Phone,
+  Wifi,
+  Sms,
+  Public,
   TrendingUp,
-  Warning,
-  AccountBalance,
-  MoreVert,
-  CheckCircle,
-  Notifications,
   TrendingDown,
-  Speed,
+  Warning,
+  CheckCircle,
+  Info,
+  Refresh,
+  Download,
   Visibility,
+  AccountBalance,
+  Receipt,
+  Analytics,
+  CompareArrows,
+  ShoppingCart,
+  Star,
+  Business,
+  Person,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bill, Anomaly } from '../../types';
+import { useNavigate } from 'react-router-dom';
+import apiService from '../../services/api';
+import { Bill, BillSummary, CatalogResponse, Plan, AddOnPack, VAS, PremiumSMS, Anomaly, UsageSummary } from '../../types';
 
-// Styled components
-const StatsCard = ({ 
-  title, 
-  value, 
-  icon, 
-  gradient, 
-  trend, 
-  trendValue, 
-  trendDirection = 'up' 
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  gradient: string;
-  trend?: string;
-  trendValue?: string;
-  trendDirection?: 'up' | 'down';
-}) => (
-  <Card
-    sx={{
-      background: gradient,
-      color: 'white',
-      position: 'relative',
-      overflow: 'hidden',
-      borderRadius: 4,
-      transition: 'all 0.3s ease',
-      '&:hover': {
-        transform: 'translateY(-8px)',
-        boxShadow: '0px 20px 40px rgba(0,0,0,0.3)',
-      },
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Avatar
-          sx={{
-            bgcolor: 'rgba(255,255,255,0.2)',
-            mr: 2,
-            width: 48,
-            height: 48,
-          }}
-        >
-          {icon}
-        </Avatar>
-        <IconButton
-          size="small"
-          sx={{ color: 'white', ml: 'auto', opacity: 0.7 }}
-        >
-          <MoreVert />
-        </IconButton>
-      </Box>
-      <Typography variant="h3" sx={{ fontWeight: 700, mb: 1, fontSize: '2.5rem' }}>
-        {value}
-      </Typography>
-      <Typography variant="body1" sx={{ opacity: 0.9, mb: 1, fontWeight: 500 }}>
-        {title}
-      </Typography>
-      {trend && (
-        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-          {trendDirection === 'up' ? (
-            <TrendingUp sx={{ fontSize: 16, mr: 0.5, color: 'rgba(255,255,255,0.8)' }} />
-          ) : (
-            <TrendingDown sx={{ fontSize: 16, mr: 0.5, color: 'rgba(255,255,255,0.8)' }} />
-          )}
-          <Typography variant="caption" sx={{ opacity: 0.8 }}>
-            {trend} {trendValue}
-          </Typography>
-        </Box>
-      )}
-    </CardContent>
-  </Card>
-);
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`dashboard-tabpanel-${index}`}
+      aria-labelledby={`dashboard-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const DashboardPage: React.FC = () => {
-  const theme = useTheme();
   const { user } = useAuth();
-  const [recentBills, setRecentBills] = useState<Bill[]>([]);
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const [tabValue, setTabValue] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  // State for different data
+  const [recentBills, setRecentBills] = useState<Bill[]>([]);
+  const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState('2025-02');
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setIsLoading(true);
-        // Demo veriler için mock data kullanıyoruz
-        const mockBills: Bill[] = [
-          {
-            id: 1,
-            userId: 1,
-            period: '2024-01',
-            totalAmount: 89.99,
-            taxAmount: 16.19,
-            netAmount: 73.80,
-            dueDate: '2024-02-15',
-            status: 'PAID',
-            items: [],
-            createdAt: '2024-01-31',
-            updatedAt: '2024-01-31',
-          },
-          {
-            id: 2,
-            userId: 1,
-            period: '2023-12',
-            totalAmount: 79.99,
-            taxAmount: 14.39,
-            netAmount: 65.60,
-            dueDate: '2024-01-15',
-            status: 'PAID',
-            items: [],
-            createdAt: '2023-12-31',
-            updatedAt: '2023-12-31',
-          },
-        ];
-
-        const mockAnomalies: Anomaly[] = [
-          {
-            id: 1,
-            userId: 1,
-            billId: 1,
-            type: 'UNUSUAL_USAGE',
-            severity: 'MEDIUM',
-            description: 'Veri kullanımında %25 artış tespit edildi',
-            detectedAt: '2024-01-28',
-            status: 'DETECTED',
-          },
-        ];
-
-        setRecentBills(mockBills);
-        setAnomalies(mockAnomalies);
-      } catch (error) {
-        console.error('Dashboard data fetch failed:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDashboardData();
+    loadDashboardData();
   }, []);
 
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      // Load catalog data
+      const catalogResponse = await apiService.getFullCatalog();
+      setCatalog(catalogResponse.data);
+      
+      // Load recent bills (demo user ID: 1001)
+      const billsResponse = await apiService.getRecentBillsByUserId(1001);
+      setRecentBills(billsResponse.data);
+      
+      // Mock anomalies data (backend endpoint çalışmıyor)
+      const mockAnomalies = [
+        {
+          anomalyId: 1,
+          userId: 1001,
+          billId: 1,
+          type: 'DATA_USAGE',
+          severity: 'MEDIUM',
+          description: 'Data kullanımında anormal artış tespit edildi',
+          detectedAt: new Date().toISOString(),
+          status: 'ACTIVE',
+          zScore: 2.5,
+          percentageDifference: 15.5,
+          recommendations: ['Data paketini kontrol edin', 'Kullanım limitlerini gözden geçirin']
+        },
+        {
+          anomalyId: 2,
+          userId: 1001,
+          billId: 1,
+          type: 'VOICE_USAGE',
+          severity: 'LOW',
+          description: 'Ses kullanımında hafif anomali',
+          detectedAt: new Date().toISOString(),
+          status: 'ACTIVE',
+          zScore: 1.8,
+          percentageDifference: 8.2,
+          recommendations: ['Arama geçmişini kontrol edin']
+        }
+      ];
+      setAnomalies(mockAnomalies);
+      
+      // Mock usage summary (backend endpoint çalışmıyor)
+      const mockUsageSummary = {
+        userId: 1001,
+        period: selectedPeriod,
+        dataUsage: 4.2,
+        voiceUsage: 45,
+        smsUsage: 12,
+        roamingUsage: 0,
+        totalCost: 45.0,
+        dailyBreakdown: []
+      };
+      setUsageSummary(mockUsageSummary);
+      
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Veri yüklenirken bir hata oluştu');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PAID':
+    switch (status?.toLowerCase()) {
+      case 'active':
+      case 'success':
         return 'success';
-      case 'PENDING':
+      case 'warning':
         return 'warning';
-      case 'OVERDUE':
+      case 'error':
+      case 'failed':
         return 'error';
       default:
         return 'default';
     }
   };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'HIGH':
-        return 'error';
-      case 'MEDIUM':
-        return 'warning';
-      case 'LOW':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const totalBills = recentBills.length;
-  const totalAmount = recentBills.reduce((sum, bill) => sum + bill.totalAmount, 0);
-  const averageAmount = totalBills > 0 ? totalAmount / totalBills : 0;
-  const activeAnomalies = anomalies.filter(a => a.status === 'DETECTED').length;
 
   if (isLoading) {
     return (
-      <Box sx={{ width: '100%' }}>
-        <LinearProgress />
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress size={60} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 0 }}>
-      {/* Welcome Section */}
-      <Grow in={true} timeout={800}>
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h3" sx={{ 
-            fontWeight: 800, 
-            mb: 2,
-            background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            textAlign: 'center',
-          }}>
-            Hoş Geldiniz, {user?.msisdn || 'Kullanıcı'}! 👋
-          </Typography>
-          <Typography variant="h6" sx={{ 
-            color: 'text.secondary', 
-            textAlign: 'center',
-            fontWeight: 400,
-            opacity: 0.8,
-          }}>
-            Fatura durumunuzu ve kullanım analizlerinizi takip edin
-          </Typography>
-        </Box>
-      </Grow>
-
-      {/* Stats Cards */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { 
-          xs: '1fr', 
-          sm: 'repeat(2, 1fr)', 
-          md: 'repeat(4, 1fr)' 
-        }, 
-        gap: 3, 
-        mb: 4 
-      }}>
-        <Grow in={true} timeout={1000}>
-          <div>
-            <StatsCard
-              title="Toplam Fatura"
-              value={totalBills}
-              icon={<Receipt />}
-              gradient="linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)"
-              trend="Bu ay"
-              trendValue="+2"
-            />
-          </div>
-        </Grow>
-
-        <Grow in={true} timeout={1200}>
-          <div>
-            <StatsCard
-              title="Ortalama Fatura"
-              value={`₺${averageAmount.toFixed(2)}`}
-              icon={<AccountBalance />}
-              gradient="linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)"
-              trend="Geçen aya göre"
-              trendValue="+12%"
-            />
-          </div>
-        </Grow>
-
-        <Grow in={true} timeout={1400}>
-          <div>
-            <StatsCard
-              title="Toplam Tutar"
-              value={`₺${totalAmount.toFixed(2)}`}
-              icon={<TrendingUp />}
-              gradient="linear-gradient(135deg, #00C851 0%, #00994A 100%)"
-              trend="Bu dönem"
-              trendValue="+8.5%"
-            />
-          </div>
-        </Grow>
-
-        <Grow in={true} timeout={1600}>
-          <div>
-            <StatsCard
-              title="Aktif Anomali"
-              value={activeAnomalies}
-              icon={<Warning />}
-              gradient="linear-gradient(135deg, #FF9800 0%, #F57C00 100%)"
-              trend="Son 7 gün"
-              trendValue="-1"
-              trendDirection="down"
-            />
-          </div>
-        </Grow>
-      </Box>
-
-      {/* Main Content Grid */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { 
-          xs: '1fr', 
-          md: '2fr 1fr' 
-        }, 
-        gap: 3 
-      }}>
-        {/* Recent Bills */}
-        <Grow in={true} timeout={1800}>
-          <Card sx={{ 
-            borderRadius: 4, 
-            boxShadow: '0px 8px 32px rgba(0,0,0,0.08)',
-            border: '1px solid rgba(0,0,0,0.05)',
-          }}>
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                  <Receipt sx={{ mr: 1, color: 'primary.main' }} />
-                  Son Faturalar
-                </Typography>
-                <Box sx={{ ml: 'auto' }}>
-                  <Chip
-                    label={`${recentBills.length} fatura`}
-                    size="small"
-                    color="primary"
-                    sx={{ fontWeight: 600 }}
-                  />
-                </Box>
-              </Box>
-
-              {recentBills.map((bill, index) => (
-                <Fade in={true} timeout={2000 + index * 200} key={bill.id}>
-                  <Box
+    <Box sx={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(135deg, #F8F9FA 0%, #E3F2FD 100%)',
+      py: 3 
+    }}>
+      <Container maxWidth="xl">
+        {/* Header */}
+        <Grow in={true} timeout={800}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              mb: 3,
+              borderRadius: 4,
+              background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+              color: 'white',
+              position: 'relative',
+              overflow: 'hidden',
+              border: '2px solid #E60000',
+            }}
+          >
+            <Box sx={{ position: 'relative', zIndex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Avatar
                     sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      p: 2.5,
-                      mb: 2,
-                      borderRadius: 3,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      backgroundColor: 'background.paper',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                        transform: 'translateX(8px)',
-                        boxShadow: '0px 4px 16px rgba(0,0,0,0.1)',
-                      },
+                      bgcolor: 'rgba(255, 255, 255, 0.2)',
+                      mr: 2,
+                      width: 60,
+                      height: 60,
                     }}
                   >
-                    <Avatar
-                      sx={{
-                        bgcolor: theme.palette.primary.main,
-                        mr: 2,
-                        width: 48,
-                        height: 48,
-                        boxShadow: '0px 4px 12px rgba(230, 0, 0, 0.3)',
-                      }}
-                    >
-                      <Receipt />
-                    </Avatar>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                        {bill.period} Dönemi
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Son Ödeme: {new Date(bill.dueDate).toLocaleDateString('tr-TR')}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ textAlign: 'right', mr: 2 }}>
-                      <Typography variant="h5" sx={{ 
-                        fontWeight: 800, 
-                        color: 'primary.main',
-                        mb: 1,
-                      }}>
-                        ₺{bill.totalAmount.toFixed(2)}
-                      </Typography>
-                      <Chip
-                        label={bill.status === 'PAID' ? 'Ödendi' : 'Bekliyor'}
-                        color={getStatusColor(bill.status) as any}
-                        size="small"
-                        sx={{ fontWeight: 600 }}
-                      />
-                    </Box>
+                    {user?.role === 'ROLE_ADMIN' ? <Business /> : <Person />}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+                      Hoş Geldiniz, {user?.msisdn || 'Kullanıcı'}
+                    </Typography>
+                    <Typography variant="h6" sx={{ opacity: 0.9, fontWeight: 500 }}>
+                      {user?.role === 'ROLE_ADMIN' ? 'Kurumsal Hesap' : 'Bireysel Hesap'}
+                    </Typography>
                   </Box>
-                </Fade>
-              ))}
-            </CardContent>
-          </Card>
+                </Box>
+                
+                {/* Sağ üst bilgiler */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: '#E60000' }}>
+                    {user?.msisdn || 'N/A'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                    Dönem: {selectedPeriod}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Chip
+                  icon={<Phone />}
+                  label={`MSISDN: ${user?.msisdn || 'N/A'}`}
+                  sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
+                />
+                <Chip
+                  icon={<AccountBalance />}
+                  label={`Rol: ${user?.role === 'ROLE_ADMIN' ? 'Admin' : 'Kullanıcı'}`}
+                  sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
+                />
+                <Chip
+                  icon={<Receipt />}
+                  label={`Dönem: ${selectedPeriod}`}
+                  sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
+                />
+              </Box>
+            </Box>
+          </Paper>
         </Grow>
 
-        {/* Anomaly Status */}
-        <Grow in={true} timeout={2000}>
-          <Card sx={{ 
-            borderRadius: 4, 
-            boxShadow: '0px 8px 32px rgba(0,0,0,0.08)',
-            border: '1px solid rgba(0,0,0,0.05)',
-          }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h5" sx={{ 
-                fontWeight: 700, 
-                mb: 3, 
-                display: 'flex', 
-                alignItems: 'center',
-                color: 'primary.main',
+        {/* Error Alert */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {/* Quick Stats */}
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gap: 3, 
+          mb: 3 
+        }}>
+          <Box>
+            <Grow in={true} timeout={1000}>
+              <Card sx={{ 
+                borderRadius: 3, 
+                boxShadow: 3,
+                background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+                color: 'white',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                transition: 'all 0.3s ease'
               }}>
-                <Warning sx={{ mr: 1 }} />
-                Anomali Durumu
-              </Typography>
+                <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                  <Avatar sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', mx: 'auto', mb: 2, width: 56, height: 56 }}>
+                    <Receipt sx={{ color: 'white' }} />
+                  </Avatar>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+                    {recentBills.length}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Toplam Fatura
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grow>
+          </Box>
+          
+          <Box>
+            <Grow in={true} timeout={1200}>
+              <Card sx={{ 
+                borderRadius: 3, 
+                boxShadow: 3,
+                background: 'linear-gradient(135deg, #E60000 0%, #CC0000 100%)',
+                color: 'white',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                transition: 'all 0.3s ease'
+              }}>
+                <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                  <Avatar sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', mx: 'auto', mb: 2, width: 56, height: 56 }}>
+                    <Warning sx={{ color: 'white' }} />
+                  </Avatar>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+                    {anomalies.length}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Anomali Tespit
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grow>
+          </Box>
+          
+          <Box>
+            <Grow in={true} timeout={1400}>
+              <Card sx={{ 
+                borderRadius: 3, 
+                boxShadow: 3,
+                background: 'linear-gradient(135deg, #00C851 0%, #00994A 100%)',
+                color: 'white',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                transition: 'all 0.3s ease'
+              }}>
+                <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                  <Avatar sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', mx: 'auto', mb: 2, width: 56, height: 56 }}>
+                    <TrendingUp sx={{ color: 'white' }} />
+                  </Avatar>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+                    {catalog?.plans?.length || 0}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Aktif Plan
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grow>
+          </Box>
+          
+          <Box>
+            <Grow in={true} timeout={1600}>
+              <Card sx={{ 
+                borderRadius: 3, 
+                boxShadow: 3,
+                background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
+                color: 'white',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                transition: 'all 0.3s ease'
+              }}>
+                <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                  <Avatar sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', mx: 'auto', mb: 2, width: 56, height: 56 }}>
+                    <Analytics sx={{ color: 'white' }} />
+                  </Avatar>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+                    {catalog?.addOns?.length || 0}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Ek Paket
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grow>
+          </Box>
+        </Box>
 
-              {anomalies.length > 0 ? (
-                anomalies.map((anomaly, index) => (
-                  <Fade in={true} timeout={2200 + index * 200} key={anomaly.id}>
-                    <Box
-                      sx={{
-                        p: 2.5,
-                        mb: 2,
-                        borderRadius: 3,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        bgcolor: 'background.paper',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          transform: 'scale(1.02)',
-                          boxShadow: '0px 4px 16px rgba(0,0,0,0.1)',
-                        },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-                        <Chip
-                          label={anomaly.severity === 'HIGH' ? 'Yüksek' : anomaly.severity === 'MEDIUM' ? 'Orta' : 'Düşük'}
-                          color={getSeverityColor(anomaly.severity) as any}
-                          size="small"
-                          sx={{ mr: 1, fontWeight: 600 }}
-                        />
-                        <Chip
-                          label={anomaly.type === 'UNUSUAL_USAGE' ? 'Kullanım' : 'Fiyat'}
-                          variant="outlined"
-                          size="small"
-                          sx={{ fontWeight: 500 }}
-                        />
-                      </Box>
-                      <Typography variant="body1" sx={{ mb: 1.5, fontWeight: 500 }}>
-                        {anomaly.description}
-                      </Typography>
-                      <Typography variant="caption" sx={{ 
-                        color: 'text.secondary',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}>
-                        <Visibility sx={{ fontSize: 14, mr: 0.5 }} />
-                        {new Date(anomaly.detectedAt).toLocaleDateString('tr-TR')}
-                      </Typography>
-                    </Box>
-                  </Fade>
-                ))
-              ) : (
-                <Fade in={true} timeout={2400}>
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <CheckCircle sx={{ 
-                      fontSize: 64, 
-                      color: 'success.main', 
-                      mb: 2,
-                      opacity: 0.8,
-                    }} />
-                    <Typography variant="h6" sx={{ 
-                      color: 'success.main', 
-                      mb: 1,
-                      fontWeight: 600,
-                    }}>
-                      Anomali Tespit Edilmedi
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Sisteminiz normal çalışıyor
-                    </Typography>
-                  </Box>
-                </Fade>
-              )}
-            </CardContent>
-          </Card>
-        </Grow>
-      </Box>
-
-      {/* Quick Actions */}
-      <Grow in={true} timeout={2600}>
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h5" sx={{ 
-            fontWeight: 700, 
-            mb: 3,
-            textAlign: 'center',
-            color: 'text.primary',
-          }}>
-            Hızlı İşlemler
-          </Typography>
+        {/* Main Content Tabs */}
+        <Paper sx={{ borderRadius: 4, boxShadow: 3, overflow: 'hidden' }}>
           <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: { 
-              xs: '1fr', 
-              sm: 'repeat(2, 1fr)', 
-              md: 'repeat(4, 1fr)' 
-            }, 
-            gap: 2 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            background: 'linear-gradient(90deg, #00A3E0 0%, #0077A3 100%)'
           }}>
-            {[
-              { icon: <Receipt />, label: 'Fatura Görüntüle', color: '#E60000' },
-              { icon: <Speed />, label: 'Kullanım Analizi', color: '#00A3E0' },
-              { icon: <Warning />, label: 'Anomali Raporu', color: '#FF9800' },
-              { icon: <TrendingUp />, label: 'Plan Karşılaştır', color: '#00C851' },
-            ].map((action, index) => (
-              <Fade in={true} timeout={2800 + index * 200} key={action.label}>
-                <Card
+            <Tabs
+              value={tabValue}
+              onChange={handleTabChange}
+              aria-label="dashboard tabs"
+              sx={{
+                '& .MuiTab-root': {
+                  minHeight: 64,
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  '&.Mui-selected': {
+                    color: 'white',
+                    fontWeight: 700,
+                  },
+                },
+                '& .MuiTabs-indicator': {
+                  backgroundColor: '#E60000',
+                  height: 4,
+                },
+              }}
+            >
+              <Tab label="Faturalar" icon={<Receipt />} iconPosition="start" />
+              <Tab label="Katalog" icon={<ShoppingCart />} iconPosition="start" />
+              <Tab label="Anomaliler" icon={<Warning />} iconPosition="start" />
+              <Tab label="Kullanım" icon={<Analytics />} iconPosition="start" />
+              <Tab label="Simülasyon" icon={<CompareArrows />} iconPosition="start" />
+            </Tabs>
+          </Box>
+
+          {/* Faturalar Tab */}
+          <TabPanel value={tabValue} index={0}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+                Son Faturalar
+              </Typography>
+              {recentBills.length > 0 ? (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Fatura ID</TableCell>
+                        <TableCell>Dönem</TableCell>
+                        <TableCell>Toplam Tutar</TableCell>
+                        <TableCell>Durum</TableCell>
+                        <TableCell>İşlemler</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {recentBills.map((bill) => (
+                        <TableRow key={bill.billId}>
+                          <TableCell>{bill.billId}</TableCell>
+                          <TableCell>
+                            {bill.periodStart && bill.periodEnd ? 
+                              `${bill.periodStart} - ${bill.periodEnd}` : 'N/A'
+                            }
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                              ₺{bill.totalAmount || 0}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label="Ödendi"
+                              color="success"
+                              size="small"
+                              icon={<CheckCircle />}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              startIcon={<Visibility />}
+                              variant="outlined"
+                              sx={{ mr: 1 }}
+                            >
+                              Görüntüle
+                            </Button>
+                            <Button
+                              size="small"
+                              startIcon={<Download />}
+                              variant="outlined"
+                              sx={{ mr: 1 }}
+                            >
+                              İndir
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => navigate('/bills')}
+                              sx={{
+                                background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+                                '&:hover': {
+                                  background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
+                                },
+                              }}
+                            >
+                              Detaylar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Alert severity="info">Henüz fatura bulunmuyor.</Alert>
+              )}
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={() => navigate('/bills')}
+                  startIcon={<Receipt />}
                   sx={{
-                    p: 2,
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    border: '2px solid transparent',
+                    borderRadius: 3,
+                    px: 4,
+                    py: 1.5,
+                    background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
                     '&:hover': {
-                      transform: 'translateY(-4px)',
-                      borderColor: action.color,
-                      boxShadow: `0px 8px 24px ${action.color}20`,
+                      background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
                     },
                   }}
                 >
-                  <Avatar
-                    sx={{
-                      bgcolor: action.color,
-                      width: 56,
-                      height: 56,
-                      mx: 'auto',
-                      mb: 1,
-                    }}
-                  >
-                    {action.icon}
-                  </Avatar>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {action.label}
-                  </Typography>
+                  Tüm Faturaları Görüntüle
+                </Button>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          {/* Katalog Tab */}
+          <TabPanel value={tabValue} index={1}>
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+              gap: 3 
+            }}>
+              {/* Plans */}
+              <Box>
+                <Card sx={{ borderRadius: 3, height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center' }}>
+                      <Phone sx={{ mr: 1, color: 'primary.main' }} />
+                      Tarife Planları
+                    </Typography>
+                    {catalog?.plans?.map((plan: Plan) => (
+                      <Box key={plan.planId} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                          {plan.planName}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {plan.quotaGb}GB Data • {plan.quotaMin} Dakika • {plan.quotaSms} SMS
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', mt: 1 }}>
+                          ₺{plan.monthlyPrice}/ay
+                        </Typography>
+                      </Box>
+                    ))}
+                  </CardContent>
                 </Card>
-              </Fade>
-            ))}
-          </Box>
+              </Box>
+
+              {/* Add-ons */}
+              <Box>
+                <Card sx={{ borderRadius: 3, height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center' }}>
+                      <Star sx={{ mr: 1, color: 'warning.main' }} />
+                      Ek Paketler
+                    </Typography>
+                    {catalog?.addOns?.map((addon: AddOnPack) => (
+                      <Box key={addon.addonId} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                          {addon.addonName}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {addon.description}
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'warning.main', mt: 1 }}>
+                          ₺{addon.price}/ay
+                        </Typography>
+                      </Box>
+                    ))}
+                  </CardContent>
+                </Card>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          {/* Anomaliler Tab */}
+          <TabPanel value={tabValue} index={2}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+              Anomali Tespitleri
+            </Typography>
+            {anomalies.length > 0 ? (
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+                gap: 3 
+              }}>
+                {anomalies.map((anomaly, index) => (
+                  <Box key={index}>
+                    <Card sx={{ 
+                      borderRadius: 3, 
+                      border: '2px solid', 
+                      borderColor: anomaly.severity === 'HIGH' ? 'error.main' : 'warning.main',
+                      background: anomaly.severity === 'HIGH' ? 'linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%)' : 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 6,
+                      },
+                      transition: 'all 0.3s ease'
+                    }}>
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Warning sx={{ 
+                            color: anomaly.severity === 'HIGH' ? 'error.main' : 'warning.main', 
+                            mr: 1,
+                            fontSize: 28
+                          }} />
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            Anomali #{index + 1}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          {anomaly.description || 'Anomali tespit edildi'}
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          <Chip
+                            label={anomaly.type || 'DATA'}
+                            color="warning"
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                          />
+                          <Chip
+                            label={`${anomaly.severity || 'MEDIUM'}`}
+                            color={anomaly.severity === 'HIGH' ? 'error' : 'warning'}
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Alert severity="success" icon={<CheckCircle />}>
+                Anomali tespit edilmedi. Faturalarınız normal seyrediyor.
+              </Alert>
+            )}
+          </TabPanel>
+
+          {/* Kullanım Tab */}
+          <TabPanel value={tabValue} index={3}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+              Kullanım Özeti - {selectedPeriod}
+            </Typography>
+            {usageSummary ? (
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' },
+                gap: 3 
+              }}>
+                <Box>
+                  <Card sx={{ 
+                    borderRadius: 3, 
+                    textAlign: 'center',
+                    background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                    },
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <CardContent>
+                      <Wifi sx={{ fontSize: 48, color: 'white', mb: 2 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, color: 'white' }}>
+                        {usageSummary.dataUsage || 0}GB
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                        Data Kullanımı
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Box>
+                
+                <Box>
+                  <Card sx={{ 
+                    borderRadius: 3, 
+                    textAlign: 'center',
+                    background: 'linear-gradient(135deg, #00C851 0%, #00994A 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                    },
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <CardContent>
+                      <Phone sx={{ fontSize: 48, color: 'white', mb: 2 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, color: 'white' }}>
+                        {usageSummary.voiceUsage || 0}dk
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                        Ses Kullanımı
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Box>
+                
+                <Box>
+                  <Card sx={{ 
+                    borderRadius: 3, 
+                    textAlign: 'center',
+                    background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                    },
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <CardContent>
+                      <Sms sx={{ fontSize: 48, color: 'white', mb: 2 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, color: 'white' }}>
+                        {usageSummary.smsUsage || 0}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                        SMS Kullanımı
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Box>
+                
+                <Box>
+                  <Card sx={{ 
+                    borderRadius: 3, 
+                    textAlign: 'center',
+                    background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                    },
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <CardContent>
+                      <Public sx={{ fontSize: 48, color: 'white', mb: 2 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, color: 'white' }}>
+                        {usageSummary.roamingUsage || 0}MB
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                        Roaming
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Box>
+              </Box>
+            ) : (
+              <Alert severity="info">Kullanım verisi bulunamadı.</Alert>
+            )}
+          </TabPanel>
+
+          {/* Simülasyon Tab */}
+          <TabPanel value={tabValue} index={4}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+              What-If Simülasyonu
+            </Typography>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Farklı plan ve paket kombinasyonlarını simüle ederek tasarruf fırsatlarını keşfedin.
+            </Alert>
+            
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+              gap: 3 
+            }}>
+              <Box>
+                <Card sx={{ borderRadius: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                      Mevcut Durum
+                    </Typography>
+                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Plan:</strong> Bireysel 5GB
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Aylık Tutar:</strong> ₺45
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Ek Paketler:</strong> Yok
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Box>
+              
+              <Box>
+                <Card sx={{ borderRadius: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                      Simülasyon Sonucu
+                    </Typography>
+                    <Box sx={{ p: 2, bgcolor: 'success.50', borderRadius: 2 }}>
+                      <Typography variant="body2" color="success.main">
+                        <strong>Önerilen Plan:</strong> Bireysel 10GB
+                      </Typography>
+                      <Typography variant="body2" color="success.main">
+                        <strong>Yeni Tutar:</strong> ₺40
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main', mt: 1 }}>
+                        Aylık Tasarruf: ₺5
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Box>
+            </Box>
+            
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<CompareArrows />}
+                sx={{
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1.5,
+                  background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
+                  },
+                }}
+              >
+                Yeni Simülasyon Başlat
+              </Button>
+            </Box>
+          </TabPanel>
+        </Paper>
+
+        {/* Refresh Button */}
+        <Box sx={{ mt: 3, textAlign: 'center' }}>
+          <Button
+            variant="contained"
+            startIcon={<Refresh />}
+            onClick={loadDashboardData}
+            sx={{ 
+              borderRadius: 3, 
+              px: 4,
+              py: 1.5,
+              background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
+                transform: 'translateY(-2px)',
+                boxShadow: 4,
+              },
+              transition: 'all 0.3s ease'
+            }}
+          >
+            Verileri Yenile
+          </Button>
         </Box>
-      </Grow>
+      </Container>
     </Box>
   );
 };
