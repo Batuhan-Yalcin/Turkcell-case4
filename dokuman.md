@@ -218,6 +218,68 @@ public class UsageDaily {
 }
 ```
 
+### 6. UsageDaily Repository
+```java
+@Repository
+public interface UsageDailyRepository extends JpaRepository<UsageDaily, Long> {
+    List<UsageDaily> findByUserIdAndDateBetween(Long userId, LocalDate startDate, LocalDate endDate);
+    List<UsageDaily> findByUserIdAndDateGreaterThanEqual(Long userId, LocalDate startDate);
+    
+    @Query("SELECT AVG(ud.mbUsed) FROM UsageDaily ud WHERE ud.user.userId = :userId AND ud.date >= :startDate")
+    Double getAverageDataUsage(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
+    
+    @Query("SELECT AVG(ud.minutesUsed) FROM UsageDaily ud WHERE ud.user.userId = :userId AND ud.date >= :startDate")
+    Double getAverageVoiceUsage(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
+    
+    @Query("SELECT AVG(ud.smsUsed) FROM UsageDaily ud WHERE ud.user.userId = :userId AND ud.date >= :startDate")
+    Double getAverageSMSUsage(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
+    
+    @Query("SELECT SUM(ud.roamingMb) FROM UsageDaily ud WHERE ud.user.userId = :userId AND ud.date >= :startDate")
+    Double getTotalRoamingUsage(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
+}
+```
+
+### 7. UsageDaily Service
+```java
+@Service
+public interface UsageService {
+    List<UsageDTO> getDailyUsage(Long userId, String period);
+    List<UsageDTO> getDailyUsageByDateRange(Long userId, LocalDate startDate, LocalDate endDate);
+    UsageSummaryDTO getUsageSummary(Long userId, String period);
+    UsageSummaryDTO getUsageSummaryByDateRange(Long userId, LocalDate startDate, LocalDate endDate);
+    UsageSummaryDTO analyzeUsageTrend(Long userId, int months);
+    String getDataUsageAnalysis(Long userId, String period);
+    String getVoiceUsageAnalysis(Long userId, String period);
+    String getSMSUsageAnalysis(Long userId, String period);
+    String getRoamingUsageAnalysis(Long userId, String period);
+}
+```
+
+### 8. UsageDaily Controller
+```java
+@RestController
+@RequestMapping("/usage")
+public class UsageController {
+    @GetMapping("/{userId}/daily")
+    public ResponseEntity<List<UsageDTO>> getDailyUsage(@PathVariable Long userId, @RequestParam String period);
+    
+    @GetMapping("/{userId}/summary")
+    public ResponseEntity<UsageSummaryDTO> getUsageSummary(@PathVariable Long userId, @RequestParam String period);
+    
+    @GetMapping("/{userId}/analysis/data")
+    public ResponseEntity<String> getDataUsageAnalysis(@PathVariable Long userId, @RequestParam String period);
+    
+    @GetMapping("/{userId}/analysis/voice")
+    public ResponseEntity<String> getVoiceUsageAnalysis(@PathVariable Long userId, @RequestParam String period);
+    
+    @GetMapping("/{userId}/analysis/sms")
+    public ResponseEntity<String> getSMSUsageAnalysis(@PathVariable Long userId, @RequestParam String period);
+    
+    @GetMapping("/{userId}/analysis/roaming")
+    public ResponseEntity<String> getRoamingUsageAnalysis(@PathVariable Long userId, @RequestParam String period);
+}
+```
+
 ### 6. VAS Entity
 ```java
 @Entity
@@ -616,7 +678,61 @@ public class PremiumSMSDTO {
 }
 ```
 
-### 7. Checkout DTO'ları
+### 7. Usage DTO'ları
+```java
+// UsageDTO
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class UsageDTO {
+    private Long id;
+    private Long userId;
+    private LocalDate date;
+    private Double mbUsed;
+    private Integer minutesUsed;
+    private Integer smsUsed;
+    private Double roamingMb;
+    private Double gbUsed;
+    private String formattedDate;
+}
+
+// UsageSummaryDTO
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class UsageSummaryDTO {
+    private Long userId;
+    private String period;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private Double totalDataGB;
+    private Integer totalVoiceMinutes;
+    private Integer totalSMSCount;
+    private Double totalRoamingGB;
+    private Double averageDailyDataGB;
+    private Integer averageDailyVoiceMinutes;
+    private Integer averageDailySMSCount;
+    private Double averageDailyRoamingGB;
+    private LocalDate peakDataDate;
+    private LocalDate peakVoiceDate;
+    private LocalDate peakSMSDate;
+    private String dataTrend;
+    private String voiceTrend;
+    private String smsTrend;
+    private String dataSavingsHint;
+    private String voiceSavingsHint;
+    private String smsSavingsHint;
+    private List<UsageDTO> dailyUsage;
+    private BigDecimal estimatedDataCost;
+    private BigDecimal estimatedVoiceCost;
+    private BigDecimal estimatedSMSCost;
+    private BigDecimal estimatedRoamingCost;
+}
+```
+
+### 8. Checkout DTO'ları
 ```java
 // CheckoutRequestDTO
 @Data
@@ -794,7 +910,18 @@ GET    /api/catalog/vas                       # VAS listesi
 GET    /api/catalog/premium-sms               # Premium SMS listesi
 ```
 
-### 7. Checkout Controller
+### 7. Usage Controller
+```
+GET    /api/usage/{user_id}/daily?period=YYYY-MM           # Günlük kullanım verileri
+GET    /api/usage/{user_id}/summary?period=YYYY-MM         # Kullanım özeti
+GET    /api/usage/{user_id}/analysis/data?period=YYYY-MM   # Data kullanım analizi
+GET    /api/usage/{user_id}/analysis/voice?period=YYYY-MM  # Ses kullanım analizi
+GET    /api/usage/{user_id}/analysis/sms?period=YYYY-MM    # SMS kullanım analizi
+GET    /api/usage/{user_id}/analysis/roaming?period=YYYY-MM # Roaming kullanım analizi
+GET    /api/usage/{user_id}/trend?months=N                 # Kullanım trendi analizi
+```
+
+### 8. Checkout Controller
 ```
 POST   /api/checkout                          # Mock işlem
 GET    /api/checkout/{order_id}/status        # İşlem durumu
@@ -852,7 +979,17 @@ public interface SimulationMapper {
 }
 ```
 
-### 6. Catalog Mapper
+### 6. Usage Mapper
+```java
+@Mapper(componentModel = "spring")
+public interface UsageMapper {
+    UsageDTO toUsageDTO(UsageDaily usageDaily);
+    UsageSummaryDTO toUsageSummaryDTO(Long userId, LocalDate startDate, LocalDate endDate, List<UsageDaily> usageData);
+    List<UsageDTO> toUsageDTOList(List<UsageDaily> usageDataList);
+}
+```
+
+### 7. Catalog Mapper
 ```java
 @Mapper(componentModel = "spring")
 public interface CatalogMapper {
@@ -930,6 +1067,30 @@ public interface CatalogMapper {
 ]
 ```
 
+### 5. usage_daily.json
+```json
+[
+  {
+    "id": 1,
+    "userId": 1001,
+    "date": "2025-01-15",
+    "mbUsed": 2048.0,
+    "minutesUsed": 45,
+    "smsUsed": 12,
+    "roamingMb": 0.0
+  },
+  {
+    "id": 2,
+    "userId": 1001,
+    "date": "2025-01-20",
+    "mbUsed": 3072.0,
+    "minutesUsed": 67,
+    "smsUsed": 8,
+    "roamingMb": 0.0
+  }
+]
+```
+
 ## 🎯 Implementasyon Sırası
 
 ### 1. Saat 1-2: Proje Yapısı + Entity'ler
@@ -956,6 +1117,7 @@ public interface CatalogMapper {
 - Mock data dosyalarını hazırla
 - API'leri test et
 - Demo senaryolarını hazırla
+- Kullanım analizi endpoint'lerini test et
 
 ## 🏆 Puanlama Kriterleri
 

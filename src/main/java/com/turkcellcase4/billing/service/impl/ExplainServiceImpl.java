@@ -6,6 +6,7 @@ import com.turkcellcase4.billing.model.BillItem;
 import com.turkcellcase4.billing.repository.BillRepository;
 import com.turkcellcase4.billing.repository.BillItemRepository;
 import com.turkcellcase4.billing.service.ExplainService;
+import com.turkcellcase4.billing.service.UsageService;
 import com.turkcellcase4.catalog.model.PremiumSMS;
 import com.turkcellcase4.catalog.model.VAS;
 import com.turkcellcase4.catalog.repository.PremiumSMSRepository;
@@ -34,6 +35,7 @@ public class ExplainServiceImpl implements ExplainService {
     private final BillItemRepository billItemRepository;
     private final PremiumSMSRepository premiumSMSRepository;
     private final VASRepository vasRepository;
+    private final UsageService usageService;
 
     @Override
     public ExplainResponseDTO explainBill(ExplainRequestDTO request) {
@@ -282,7 +284,7 @@ public class ExplainServiceImpl implements ExplainService {
         }
     }
 
-    private String generateVASLine(BillItem item) {
+    private String generateVASLine(BillItem item ) {
         if ("plan_fee".equals(item.getSubtype())) {
             return String.format("Plan ücreti: %s - %.2f TL", item.getDescription(), item.getAmount());
         }
@@ -362,10 +364,21 @@ public class ExplainServiceImpl implements ExplainService {
                     CategoryBreakdownDTO::getTotal
                 ));
         
+        try {
+            // Kullanım verilerini al
+            String period = bill.getPeriodStart().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            String usageAnalysis = usageService.getDataUsageAnalysis(bill.getUser().getUserId(), period);
+            if (usageAnalysis != null && !usageAnalysis.equals("Bu dönemde data kullanımı bulunmuyor.")) {
+                summary.append(usageAnalysis).append(" ");
+            }
+        } catch (Exception e) {
+            log.warn("Kullanım verileri alınamadı: {}", e.getMessage());
+        }
+        
         // Data usage summary
         BigDecimal dataTotal = categoryTotals.getOrDefault("data", BigDecimal.ZERO);
         if (dataTotal.compareTo(BigDecimal.ZERO) > 0) {
-            summary.append("Bu ay toplam data kullanımı için ").append(dataTotal).append(" TL ödediniz. ");
+            summary.append("Data kullanımı için ").append(dataTotal).append(" TL ödediniz. ");
         }
         
         // Voice usage summary

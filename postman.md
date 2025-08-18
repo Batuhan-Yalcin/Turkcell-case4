@@ -360,9 +360,65 @@ POST /api/whatif/compare
 }
 ```
 
-### 7. 🛒 Checkout (Mock)
+### 7. 📊 Usage Analysis
 
-#### 7.1 Mock İşlem
+#### 7.1 Günlük Kullanım Verileri
+```
+GET /api/usage/{userId}/daily?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/daily?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+#### 7.2 Kullanım Özeti
+```
+GET /api/usage/{userId}/summary?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/summary?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+#### 7.3 Data Kullanım Analizi
+```
+GET /api/usage/{userId}/analysis/data?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/analysis/data?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+#### 7.4 Ses Kullanım Analizi
+```
+GET /api/usage/{userId}/analysis/voice?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/analysis/voice?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+#### 7.5 SMS Kullanım Analizi
+```
+GET /api/usage/{userId}/analysis/sms?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/analysis/sms?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+#### 7.6 Roaming Kullanım Analizi
+```
+GET /api/usage/{userId}/analysis/roaming?period=YYYY-MM
+```
+**Postman Setup:**
+- Method: `GET`
+- URL: `http://localhost:8080/api/usage/1001/analysis/roaming?period=2025-01`
+- Headers: `Content-Type: application/json`
+
+### 8. 🛒 Checkout (Mock)
+
+#### 8.1 Mock İşlem
 ```
 POST /api/checkout
 ```
@@ -437,7 +493,13 @@ POST /api/checkout/validate
 2. Simülasyon sonuçlarını karşılaştır
 3. En iyi senaryoyu seç
 
-### Senaryo 5: Checkout İşlemi
+### Senaryo 5: Kullanım Analizi
+1. Kullanıcının günlük kullanım verilerini getir
+2. Kullanım özetini al
+3. Data, ses, SMS ve roaming analizlerini yap
+4. Kullanım trendini incele
+
+### Senaryo 6: Checkout İşlemi
 1. Senaryo validasyonu yap
 2. Mock checkout işlemi gerçekleştir
 3. İşlem durumunu kontrol et
@@ -525,6 +587,11 @@ GET http://localhost:8080/api/catalog
 ### 3. Fatura Sistemi
 ```
 GET http://localhost:8080/api/bills/1
+```
+
+### 4. Kullanım Analizi
+```
+GET http://localhost:8080/api/usage/1001/summary?period=2025-01
 ```
 
 ## ⚠️ Önemli Notlar
