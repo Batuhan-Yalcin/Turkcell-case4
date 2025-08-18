@@ -32,8 +32,25 @@ public class BonusController {
             @RequestParam Long anomalyId,
             @RequestParam String userContext) {
         log.info("POST /bonus/llm/anomaly - Getting AI explanation for anomaly: {}", anomalyId);
-        // TODO: AnomalyDTO'yu getir ve LLM service'e gönder
-        return ResponseEntity.ok("AI açıklaması üretilecek");
+        
+        try {
+            // Mock AnomalyDTO - gerçek uygulamada repository'den alınır
+            AnomalyDTO anomaly = AnomalyDTO.builder()
+                    .type(com.turkcellcase4.common.enums.AnomalyType.SPIKE)
+                    .category("DATA")
+                    .subtype("data_overage")
+                    .delta(new java.math.BigDecimal("25.00"))
+                    .percentageChange(new java.math.BigDecimal("180"))
+                    .reason("Data aşımı nedeniyle ücret artışı")
+                    .suggestedAction("Daha büyük plana geçin")
+                    .build();
+            
+            String explanation = llmExplanationService.generateAnomalyExplanation(anomaly, userContext);
+            return ResponseEntity.ok(explanation);
+        } catch (Exception e) {
+            log.error("Anomaly explanation error: {}", e.getMessage());
+            return ResponseEntity.ok("AI açıklaması üretilemedi: " + e.getMessage());
+        }
     }
 
     /**
@@ -44,8 +61,18 @@ public class BonusController {
             @RequestParam Long userId,
             @RequestParam String period) {
         log.info("POST /bonus/llm/cohort - Getting AI explanation for cohort analysis: {}", userId);
-        // TODO: Cohort verilerini getir ve LLM service'e gönder
-        return ResponseEntity.ok("AI açıklaması üretilecek");
+        
+        try {
+            CohortAnalysisDTO cohortAnalysis = cohortService.analyzeUserCohort(userId, period);
+            Double userAverage = cohortAnalysis.getUserAverage().doubleValue();
+            Double cohortAverage = cohortAnalysis.getCohortAverage().doubleValue();
+            
+            String explanation = llmExplanationService.generateCohortAnalysis(userId, period, userAverage, cohortAverage);
+            return ResponseEntity.ok(explanation);
+        } catch (Exception e) {
+            log.error("Cohort explanation error: {}", e.getMessage());
+            return ResponseEntity.ok("AI açıklaması üretilemedi: " + e.getMessage());
+        }
     }
 
     /**
@@ -55,8 +82,18 @@ public class BonusController {
     public ResponseEntity<String> getTaxExplanation(
             @RequestParam Long billId) {
         log.info("POST /bonus/llm/tax - Getting AI explanation for tax analysis: {}", billId);
-        // TODO: Tax verilerini getir ve LLM service'e gönder
-        return ResponseEntity.ok("AI açıklaması üretilecek");
+        
+        try {
+            TaxBreakdownDTO taxBreakdown = taxAnalysisService.analyzeTaxBreakdown(billId);
+            Double totalTax = taxBreakdown.getTotalTax().doubleValue();
+            Double effectiveTaxRate = taxBreakdown.getEffectiveTaxRate().doubleValue();
+            
+            String explanation = llmExplanationService.generateTaxBreakdownAnalysis(billId, totalTax, effectiveTaxRate);
+            return ResponseEntity.ok(explanation);
+        } catch (Exception e) {
+            log.error("Tax explanation error: {}", e.getMessage());
+            return ResponseEntity.ok("AI açıklaması üretilemedi: " + e.getMessage());
+        }
     }
 
     // ===== KOHORT KİYASI =====
@@ -69,8 +106,20 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam String period) {
         log.info("GET /bonus/cohort/{}?period={} - Analyzing user cohort", userId, period);
-        // TODO: CohortService'i implement et
-        return ResponseEntity.ok(CohortAnalysisDTO.builder().build());
+        
+        try {
+            CohortAnalysisDTO cohortAnalysis = cohortService.analyzeUserCohort(userId, period);
+            return ResponseEntity.ok(cohortAnalysis);
+        } catch (Exception e) {
+            log.error("Cohort analysis error: {}", e.getMessage());
+            return ResponseEntity.ok(CohortAnalysisDTO.builder()
+                    .userId(userId)
+                    .period(period)
+                    .userAverage(java.math.BigDecimal.ZERO)
+                    .cohortAverage(java.math.BigDecimal.ZERO)
+                    .performanceRating("ERROR")
+                    .build());
+        }
     }
 
     /**
@@ -81,8 +130,20 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam String period) {
         log.info("GET /bonus/cohort/{}/similar?period={} - Finding similar users", userId, period);
-        // TODO: CohortService'i implement et
-        return ResponseEntity.ok(CohortAnalysisDTO.builder().build());
+        
+        try {
+            CohortAnalysisDTO similarUsers = cohortService.findSimilarUsers(userId, period);
+            return ResponseEntity.ok(similarUsers);
+        } catch (Exception e) {
+            log.error("Similar users error: {}", e.getMessage());
+            return ResponseEntity.ok(CohortAnalysisDTO.builder()
+                    .userId(userId)
+                    .period(period)
+                    .userAverage(java.math.BigDecimal.ZERO)
+                    .cohortAverage(java.math.BigDecimal.ZERO)
+                    .performanceRating("ERROR")
+                    .build());
+        }
     }
 
     // ===== VERGİ AYRŞTIRMASI =====
@@ -94,8 +155,19 @@ public class BonusController {
     public ResponseEntity<TaxBreakdownDTO> analyzeTaxBreakdown(
             @PathVariable Long billId) {
         log.info("GET /bonus/tax/{} - Analyzing tax breakdown", billId);
-        // TODO: TaxAnalysisService'i implement et
-        return ResponseEntity.ok(TaxBreakdownDTO.builder().build());
+        
+        try {
+            TaxBreakdownDTO taxBreakdown = taxAnalysisService.analyzeTaxBreakdown(billId);
+            return ResponseEntity.ok(taxBreakdown);
+        } catch (Exception e) {
+            log.error("Tax breakdown error: {}", e.getMessage());
+            return ResponseEntity.ok(TaxBreakdownDTO.builder()
+                    .billId(billId)
+                    .totalAmount(java.math.BigDecimal.ZERO)
+                    .totalTax(java.math.BigDecimal.ZERO)
+                    .effectiveTaxRate(java.math.BigDecimal.ZERO)
+                    .build());
+        }
     }
 
     /**
@@ -106,8 +178,19 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam(defaultValue = "3") int months) {
         log.info("GET /bonus/tax/{}/trend?months={} - Analyzing user tax trend", userId, months);
-        // TODO: TaxAnalysisService'i implement et
-        return ResponseEntity.ok(TaxBreakdownDTO.builder().build());
+        
+        try {
+            TaxBreakdownDTO taxTrend = taxAnalysisService.analyzeUserTaxTrend(userId, months);
+            return ResponseEntity.ok(taxTrend);
+        } catch (Exception e) {
+            log.error("Tax trend error: {}", e.getMessage());
+            return ResponseEntity.ok(TaxBreakdownDTO.builder()
+                    .userId(userId)
+                    .totalAmount(java.math.BigDecimal.ZERO)
+                    .totalTax(java.math.BigDecimal.ZERO)
+                    .effectiveTaxRate(java.math.BigDecimal.ZERO)
+                    .build());
+        }
     }
 
     // ===== AUTOFIX ÖNERİLERİ =====
@@ -131,8 +214,14 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam String period) {
         log.info("GET /bonus/autofix/{}/scenarios?period={} - Getting all autofix scenarios", userId, period);
-        // TODO: AutofixService'i implement et
-        return ResponseEntity.ok(List.of());
+        
+        try {
+            List<AutofixRecommendationDTO> scenarios = autofixService.getAllAutofixScenarios(userId, period);
+            return ResponseEntity.ok(scenarios);
+        } catch (Exception e) {
+            log.error("Autofix scenarios error: {}", e.getMessage());
+            return ResponseEntity.ok(List.of());
+        }
     }
 
     /**
@@ -143,8 +232,14 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam String autofixId) {
         log.info("POST /bonus/autofix/{}/apply?autofixId={} - Applying autofix", userId, autofixId);
-        // TODO: AutofixService'i implement et
-        return ResponseEntity.ok("Autofix uygulandı");
+        
+        try {
+            String result = autofixService.applyAutofix(userId, autofixId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Autofix apply error: {}", e.getMessage());
+            return ResponseEntity.ok("Autofix uygulanamadı: " + e.getMessage());
+        }
     }
 
     // ===== GENEL BONUS ANALİZİ =====
@@ -157,11 +252,30 @@ public class BonusController {
             @PathVariable Long userId,
             @RequestParam String period) {
         log.info("GET /bonus/{}/analysis?period={} - Getting complete bonus analysis", userId, period);
-        // TODO: Tüm bonus servisleri entegre et
-        return ResponseEntity.ok(Map.of(
-            "message", "Bonus analizleri üretilecek",
-            "userId", userId,
-            "period", period
-        ));
+        
+        try {
+            // Tüm bonus servisleri entegre et
+            CohortAnalysisDTO cohortAnalysis = cohortService.analyzeUserCohort(userId, period);
+            TaxBreakdownDTO taxBreakdown = taxAnalysisService.analyzeUserTaxTrend(userId, 3);
+            AutofixRecommendationDTO bestAutofix = autofixService.generateBestAutofix(userId, period);
+            
+            Map<String, Object> analysis = Map.of(
+                "userId", userId,
+                "period", period,
+                "cohortAnalysis", cohortAnalysis,
+                "taxAnalysis", taxBreakdown,
+                "bestAutofix", bestAutofix,
+                "message", "Tüm bonus analizleri başarıyla üretildi"
+            );
+            
+            return ResponseEntity.ok(analysis);
+        } catch (Exception e) {
+            log.error("Complete bonus analysis error: {}", e.getMessage());
+            return ResponseEntity.ok(Map.of(
+                "message", "Bonus analizleri üretilemedi: " + e.getMessage(),
+                "userId", userId,
+                "period", period
+            ));
+        }
     }
 }

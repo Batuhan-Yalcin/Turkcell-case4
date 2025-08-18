@@ -262,10 +262,23 @@ public class ExplainServiceImpl implements ExplainService {
         if ("data_overage".equals(item.getSubtype())) {
             BigDecimal overageGB = BigDecimal.valueOf(item.getQuantity());
             BigDecimal unitPrice = item.getUnitPrice();
-            return String.format("Ay içinde %.1f GB aşım → %.1f×%.2f TL = %.2f TL", 
-                    overageGB, overageGB, unitPrice, item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da %.1f GB aşım → %.1f×%.2f TL = %.2f TL", 
+                        dateInfo, overageGB, overageGB, unitPrice, item.getAmount());
+            } else {
+                return String.format("Ay içinde %.1f GB aşım → %.1f×%.2f TL = %.2f TL", 
+                        overageGB, overageGB, unitPrice, item.getAmount());
+            }
         } else {
-            return String.format("Data kullanımı: %s - %.2f TL", item.getDescription(), item.getAmount());
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da data kullanımı: %s - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getAmount());
+            } else {
+                return String.format("Data kullanımı: %s - %.2f TL", item.getDescription(), item.getAmount());
+            }
         }
     }
 
@@ -275,12 +288,27 @@ public class ExplainServiceImpl implements ExplainService {
         
         if (premiumSMS.isPresent()) {
             PremiumSMS sms = premiumSMS.get();
-            return String.format("%s numarasına %s SMS → %s×%.2f TL (sağlayıcı: %s)", 
-                    sms.getShortcode(), item.getQuantity(), item.getQuantity(), 
-                    sms.getUnitPrice(), sms.getProvider());
+            // Tarih bazlı detaylı açıklama ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da %s×%s numarasına Premium SMS → %s×%.2f TL (sağlayıcı: %s)", 
+                        dateInfo, item.getQuantity(), sms.getShortcode(), item.getQuantity(), 
+                        sms.getUnitPrice(), sms.getProvider());
+            } else {
+                return String.format("%s numarasına %s SMS → %s×%.2f TL (sağlayıcı: %s)", 
+                        sms.getShortcode(), item.getQuantity(), item.getQuantity(), 
+                        sms.getUnitPrice(), sms.getProvider());
+            }
         } else {
-            return String.format("Premium SMS: %s - %s adet - %.2f TL", 
-                    item.getDescription(), item.getQuantity(), item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da Premium SMS: %s - %s adet - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getQuantity(), item.getAmount());
+            } else {
+                return String.format("Premium SMS: %s - %s adet - %.2f TL", 
+                        item.getDescription(), item.getQuantity(), item.getAmount());
+            }
         }
     }
 
@@ -294,9 +322,23 @@ public class ExplainServiceImpl implements ExplainService {
         
         if (vas.isPresent()) {
             VAS vasService = vas.get();
-            return String.format("%s servisi aylık ücret %.2f TL", vasService.getName(), vasService.getMonthlyFee());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da %s servisi aylık ücret %.2f TL", 
+                        dateInfo, vasService.getName(), vasService.getMonthlyFee());
+            } else {
+                return String.format("%s servisi aylık ücret %.2f TL", vasService.getName(), vasService.getMonthlyFee());
+            }
         } else {
-            return String.format("VAS: %s - %.2f TL", item.getDescription(), item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da VAS: %s - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getAmount());
+            } else {
+                return String.format("VAS: %s - %.2f TL", item.getDescription(), item.getAmount());
+            }
         }
     }
 
@@ -304,12 +346,31 @@ public class ExplainServiceImpl implements ExplainService {
         if ("voice_overage".equals(item.getSubtype())) {
             BigDecimal overageMinutes = BigDecimal.valueOf(item.getQuantity());
             BigDecimal unitPrice = item.getUnitPrice();
-            return String.format("Ay içinde %.0f dk arama aşımı → %.0f×%.2f TL = %.2f TL", 
-                    overageMinutes, overageMinutes, unitPrice, item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da %.0f dk arama aşımı → %.0f×%.2f TL = %.2f TL", 
+                        dateInfo, overageMinutes, overageMinutes, unitPrice, item.getAmount());
+            } else {
+                return String.format("Ay içinde %.0f dk arama aşımı → %.0f×%.2f TL = %.2f TL", 
+                        overageMinutes, overageMinutes, unitPrice, item.getAmount());
+            }
         } else if ("intl_call".equals(item.getSubtype())) {
-            return String.format("Uluslararası arama: %s - %.2f TL", item.getDescription(), item.getAmount());
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da uluslararası arama: %s - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getAmount());
+            } else {
+                return String.format("Uluslararası arama: %s - %.2f TL", item.getDescription(), item.getAmount());
+            }
         } else {
-            return String.format("Ses kullanımı: %s - %.2f TL", item.getDescription(), item.getAmount());
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da ses kullanımı: %s - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getAmount());
+            } else {
+                return String.format("Ses kullanımı: %s - %.2f TL", item.getDescription(), item.getAmount());
+            }
         }
     }
 
@@ -317,11 +378,24 @@ public class ExplainServiceImpl implements ExplainService {
         if ("sms_overage".equals(item.getSubtype())) {
             BigDecimal overageSMS = BigDecimal.valueOf(item.getQuantity());
             BigDecimal unitPrice = item.getUnitPrice();
-            return String.format("Ay içinde %s SMS aşımı → %s×%.2f TL = %.2f TL", 
-                    overageSMS, overageSMS, unitPrice, item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da %s SMS aşımı → %s×%.2f TL = %.2f TL", 
+                        dateInfo, overageSMS, overageSMS, unitPrice, item.getAmount());
+            } else {
+                return String.format("Ay içinde %s SMS aşımı → %s×%.2f TL = %.2f TL", 
+                        overageSMS, overageSMS, unitPrice, item.getAmount());
+            }
         } else {
-            return String.format("SMS kullanımı: %s - %s adet - %.2f TL", 
-                    item.getDescription(), item.getQuantity(), item.getAmount());
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da SMS kullanımı: %s - %s adet - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getQuantity(), item.getAmount());
+            } else {
+                return String.format("SMS kullanımı: %s - %s adet - %.2f TL", 
+                        item.getDescription(), item.getQuantity(), item.getAmount());
+            }
         }
     }
 
@@ -329,15 +403,35 @@ public class ExplainServiceImpl implements ExplainService {
         if ("roaming_data".equals(item.getSubtype())) {
             BigDecimal roamingMB = BigDecimal.valueOf(item.getQuantity());
             BigDecimal unitPrice = item.getUnitPrice();
-            return String.format("Yurt dışı data: %.0f MB → %.0f×%.2f TL = %.2f TL", 
-                    roamingMB, roamingMB, unitPrice, item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da yurt dışı data: %.0f MB → %.0f×%.2f TL = %.2f TL", 
+                        dateInfo, roamingMB, roamingMB, unitPrice, item.getAmount());
+            } else {
+                return String.format("Yurt dışı data: %.0f MB → %.0f×%.2f TL = %.2f TL", 
+                        roamingMB, roamingMB, unitPrice, item.getAmount());
+            }
         } else if ("roaming_voice".equals(item.getSubtype())) {
             BigDecimal roamingMinutes = BigDecimal.valueOf(item.getQuantity());
             BigDecimal unitPrice = item.getUnitPrice();
-            return String.format("Yurt dışı arama: %.0f dk → %.0f×%.2f TL = %.2f TL", 
-                    roamingMinutes, roamingMinutes, unitPrice, item.getAmount());
+            // Tarih bilgisi varsa ekle
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da yurt dışı arama: %.0f dk → %.0f×%.2f TL = %.2f TL", 
+                        dateInfo, roamingMinutes, roamingMinutes, unitPrice, item.getAmount());
+            } else {
+                return String.format("Yurt dışı arama: %.0f dk → %.0f×%.2f TL = %.2f TL", 
+                        roamingMinutes, roamingMinutes, unitPrice, item.getAmount());
+            }
         } else {
-            return String.format("Roaming: %s - %.2f TL", item.getDescription(), item.getAmount());
+            String dateInfo = getDateInfoForItem(item);
+            if (dateInfo != null) {
+                return String.format("%s'da roaming: %s - %.2f TL", 
+                        dateInfo, item.getDescription(), item.getAmount());
+            } else {
+                return String.format("Roaming: %s - %.2f TL", item.getDescription(), item.getAmount());
+            }
         }
     }
 
@@ -462,5 +556,16 @@ public class ExplainServiceImpl implements ExplainService {
         } else {
             return "Faturanızda tasarruf fırsatı bulunmuyor";
         }
+    }
+
+    /**
+     * Bill item için tarih bilgisini alır
+     * Eğer created_at tarihi varsa, "07.06" formatında döner
+     */
+    private String getDateInfoForItem(BillItem item) {
+        if (item.getCreatedAt() != null) {
+            return item.getCreatedAt().format(DateTimeFormatter.ofPattern("dd.MM"));
+        }
+        return null;
     }
 }

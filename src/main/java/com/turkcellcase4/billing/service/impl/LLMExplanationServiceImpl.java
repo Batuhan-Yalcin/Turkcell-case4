@@ -192,13 +192,31 @@ public class LLMExplanationServiceImpl implements LLMExplanationService {
     }
 
     private String parseGeminiResponse(String response) {
-        // Gemini API response'unu parse et
-        // Bu basit bir implementasyon, gerçek uygulamada daha detaylı parsing gerekir
-        if (response != null && response.contains("text")) {
-            // JSON response'dan text'i çıkar
-            return response.substring(response.indexOf("text") + 7, response.indexOf("}"));
+        try {
+            // Gemini API response'unu parse et
+            if (response != null && response.contains("text")) {
+                // JSON response'dan text'i çıkar - daha güvenli parsing
+                int textStart = response.indexOf("\"text\":\"");
+                if (textStart != -1) {
+                    textStart += 9; // "text":" uzunluğu
+                    int textEnd = response.indexOf("\"", textStart);
+                    if (textEnd != -1) {
+                        return response.substring(textStart, textEnd);
+                    }
+                }
+                
+                // Fallback parsing
+                int start = response.indexOf("text") + 7;
+                int end = response.indexOf("}", start);
+                if (start > 6 && end > start) {
+                    return response.substring(start, end);
+                }
+            }
+            return "AI açıklaması üretilemedi.";
+        } catch (Exception e) {
+            log.error("Gemini response parsing error: {}", e.getMessage());
+            return "AI açıklaması parse edilemedi.";
         }
-        return "AI açıklaması üretilemedi.";
     }
 
     // Fallback metodları - API çalışmazsa basit açıklamalar üret
@@ -210,21 +228,21 @@ public class LLMExplanationServiceImpl implements LLMExplanationService {
     private String generateFallbackCohortAnalysis(Double userAverage, Double cohortAverage) {
         double difference = userAverage - cohortAverage;
         if (difference > 0) {
-            return String.format("Kullanıcınız benzer kullanıcılara göre %.2f TL daha fazla ödüyor. Bu durum yüksek kullanımdan kaynaklanıyor olabilir.");
+            return String.format("Kullanıcınız benzer kullanıcılara göre %.2f TL daha fazla ödüyor. Bu durum yüksek kullanımdan kaynaklanıyor olabilir.", difference);
         } else {
-            return String.format("Kullanıcınız benzer kullanıcılara göre %.2f TL daha az ödüyor. Bu durum verimli kullanımdan kaynaklanıyor olabilir.");
+            return String.format("Kullanıcınız benzer kullanıcılara göre %.2f TL daha az ödüyor. Bu durum verimli kullanımdan kaynaklanıyor olabilir.", Math.abs(difference));
         }
     }
 
     private String generateFallbackTaxAnalysis(Double totalTax, Double effectiveTaxRate) {
-        return String.format("Toplam %.2f TL vergi ödenmiş. Efektif vergi oranı %.2f%% olarak hesaplanmış. Bu oran standart KDV oranına yakın.");
+        return String.format("Toplam %.2f TL vergi ödenmiş. Efektif vergi oranı %.2f%% olarak hesaplanmış. Bu oran standart KDV oranına yakın.", totalTax, effectiveTaxRate * 100);
     }
 
     private String generateFallbackAutofixRecommendation(Double currentCost, Double potentialSavings) {
-        return String.format("Mevcut maliyet %.2f TL. Potansiyel tasarruf %.2f TL. Plan değişikliği veya ek paket iptali ile tasarruf edebilirsiniz.");
+        return String.format("Mevcut maliyet %.2f TL. Potansiyel tasarruf %.2f TL. Plan değişikliği veya ek paket iptali ile tasarruf edebilirsiniz.", currentCost, potentialSavings);
     }
 
     private String generateFallbackBillSummary(Double totalAmount, String mainCategories) {
-        return String.format("Fatura tutarı %.2f TL. Ana kategoriler: %s. Bu tutar normal kullanım için uygun görünüyor.");
+        return String.format("Fatura tutarı %.2f TL. Ana kategoriler: %s. Bu tutar normal kullanım için uygun görünüyor.", totalAmount, mainCategories);
     }
 }

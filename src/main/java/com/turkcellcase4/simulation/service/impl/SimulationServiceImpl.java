@@ -3,6 +3,7 @@ package com.turkcellcase4.simulation.service.impl;
 import com.turkcellcase4.billing.dto.BillResponseDTO;
 import com.turkcellcase4.billing.model.Bill;
 import com.turkcellcase4.billing.model.BillItem;
+import com.turkcellcase4.billing.model.UsageDaily;
 import com.turkcellcase4.billing.repository.BillRepository;
 import com.turkcellcase4.billing.repository.BillItemRepository;
 import com.turkcellcase4.billing.service.BillService;
@@ -10,6 +11,7 @@ import com.turkcellcase4.catalog.model.Plan;
 import com.turkcellcase4.catalog.model.AddOnPack;
 import com.turkcellcase4.catalog.repository.PlanRepository;
 import com.turkcellcase4.catalog.repository.AddOnPackRepository;
+import com.turkcellcase4.billing.repository.UsageDailyRepository;
 import com.turkcellcase4.common.enums.ItemCategory;
 import com.turkcellcase4.simulation.dto.*;
 import com.turkcellcase4.simulation.service.SimulationService;
@@ -39,6 +41,7 @@ public class SimulationServiceImpl implements SimulationService {
     private final AddOnPackRepository addOnPackRepository;
     private final UserRepository userRepository;
     private final BillService billService;
+    private final UsageDailyRepository usageDailyRepository;
 
     @Override
     public SimulationResponseDTO simulateScenario(SimulationRequestDTO request) {
@@ -283,15 +286,57 @@ public class SimulationServiceImpl implements SimulationService {
         LocalDate periodStart = LocalDate.parse(period + "-01", formatter);
         LocalDate periodEnd = periodStart.plusMonths(1).minusDays(1);
         
-        // This would normally query usage_daily table
-        // For now, return mock data based on bill items
-        Map<String, BigDecimal> usage = new HashMap<>();
-        usage.put("data_gb", new BigDecimal("8.5")); // Mock data usage
-        usage.put("voice_min", new BigDecimal("180"));
-        usage.put("sms_count", new BigDecimal("45"));
-        usage.put("roaming_mb", new BigDecimal("0"));
-        
-        return usage;
+        // Get real usage data from usage_daily table
+        try {
+            List<UsageDaily> usageData = usageDailyRepository.findByUser_UserIdAndDateBetween(userId, periodStart, periodEnd);
+            
+            Map<String, BigDecimal> usage = new HashMap<>();
+            
+            if (!usageData.isEmpty()) {
+                // Calculate total data usage in GB
+                double totalDataMB = usageData.stream()
+                    .mapToDouble(ud -> ud.getMbUsed() != null ? ud.getMbUsed() : 0.0)
+                    .sum();
+                usage.put("data_gb", BigDecimal.valueOf(totalDataMB / 1024.0));
+                
+                // Calculate total voice usage in minutes
+                int totalVoiceMinutes = usageData.stream()
+                    .mapToInt(ud -> ud.getMinutesUsed() != null ? ud.getMinutesUsed() : 0)
+                    .sum();
+                usage.put("voice_min", BigDecimal.valueOf(totalVoiceMinutes));
+                
+                // Calculate total SMS usage
+                int totalSMSCount = usageData.stream()
+                    .mapToInt(ud -> ud.getSmsUsed() != null ? ud.getSmsUsed() : 0)
+                    .sum();
+                usage.put("sms_count", BigDecimal.valueOf(totalSMSCount));
+                
+                // Calculate total roaming usage in MB
+                double totalRoamingMB = usageData.stream()
+                    .mapToDouble(ud -> ud.getRoamingMb() != null ? ud.getRoamingMb() : 0.0)
+                    .sum();
+                usage.put("roaming_mb", BigDecimal.valueOf(totalRoamingMB));
+            } else {
+                // Fallback to bill items if no usage data
+                usage.put("data_gb", BigDecimal.ZERO);
+                usage.put("voice_min", BigDecimal.ZERO);
+                usage.put("sms_count", BigDecimal.ZERO);
+                usage.put("roaming_mb", BigDecimal.ZERO);
+            }
+            
+            return usage;
+        } catch (Exception e) {
+            log.warn("Usage data alınamadı, fallback kullanılıyor: {}", e.getMessage());
+            
+            // Fallback to bill items
+            Map<String, BigDecimal> usage = new HashMap<>();
+            usage.put("data_gb", BigDecimal.ZERO);
+            usage.put("voice_min", BigDecimal.ZERO);
+            usage.put("sms_count", BigDecimal.ZERO);
+            usage.put("roaming_mb", BigDecimal.ZERO);
+            
+            return usage;
+        }
     }
 
     private BigDecimal getCurrentPlanCost(Bill bill) {

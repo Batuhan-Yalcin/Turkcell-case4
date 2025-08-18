@@ -2,6 +2,7 @@ package com.turkcellcase4.billing.controller;
 
 import com.turkcellcase4.billing.dto.BillResponseDTO;
 import com.turkcellcase4.billing.dto.BillItemDTO;
+import com.turkcellcase4.billing.dto.BillSummaryDTO;
 import com.turkcellcase4.billing.service.BillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,11 +45,25 @@ public class BillController {
         return ResponseEntity.ok(bills);
     }
 
+    @GetMapping("/{userId}/periods")
+    public ResponseEntity<List<String>> getAvailablePeriods(@PathVariable Long userId) {
+        log.info("GET /bills/{}/periods - Getting available periods for user", userId);
+        List<String> periods = billService.getAvailablePeriods(userId);
+        return ResponseEntity.ok(periods);
+    }
+
     @GetMapping("/{billId}/items")
     public ResponseEntity<List<BillItemDTO>> getBillItemsByBillId(@PathVariable Long billId) {
         log.info("GET /bills/{}/items - Getting bill items", billId);
         List<BillItemDTO> items = billService.getBillItemsByBillId(billId);
         return ResponseEntity.ok(items);
+    }
+
+    @GetMapping("/{billId}/summary")
+    public ResponseEntity<BillSummaryDTO> getBillSummary(@PathVariable Long billId) {
+        log.info("GET /bills/{}/summary - Getting bill summary", billId);
+        BillSummaryDTO summary = billService.getBillSummary(billId);
+        return ResponseEntity.ok(summary);
     }
 
     @GetMapping("/{userId}/range")
