@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.turkcellcase4.common.exception.BusinessLogicException;
 
 @Service
 @RequiredArgsConstructor
@@ -31,41 +32,36 @@ public class AnomalyServiceImpl implements AnomalyService {
     public AnomalyResponseDTO detectAnomalies(AnomalyRequestDTO request) {
         log.info("Detecting anomalies for user: {} and period: {}", request.getUserId(), request.getPeriod());
         
-        // Get current period bill
-        Bill currentBill = getCurrentBill(request.getUserId(), request.getPeriod());
-        if (currentBill == null) {
-            throw new RuntimeException("No bill found for the specified period");
+        try {
+            List<AnomalyDTO> anomalies = new ArrayList<>();
+            
+            // Parse period
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
+            LocalDate periodDate = LocalDate.parse(request.getPeriod() + "-01", formatter);
+            
+            // Get current month bill
+            int year = periodDate.getYear();
+            int month = periodDate.getMonthValue();
+            
+            Optional<Bill> currentBill = billRepository.findByUserIdAndPeriod(request.getUserId(), year, month);
+            if (currentBill.isEmpty()) {
+                return AnomalyResponseDTO.builder().anomalies(anomalies).build();
+            }
+            
+            // Get last 3 months bills for comparison
+            LocalDate threeMonthsAgo = periodDate.minusMonths(3);
+            List<Bill> recentBills = billRepository.findRecentBillsByUserId(request.getUserId(), threeMonthsAgo);
+            
+            // Detect anomalies
+            anomalies.addAll(detectSpikeAnomalies(currentBill.get(), recentBills));
+            anomalies.addAll(detectNewItemsAnomalies(currentBill.get(), recentBills));
+            anomalies.addAll(detectRoamingAnomalies(currentBill.get(), recentBills));
+            anomalies.addAll(detectPremiumSMSAnomalies(currentBill.get(), recentBills));
+            
+            return AnomalyResponseDTO.builder().anomalies(anomalies).build();
+        } catch (Exception e) {
+            throw new BusinessLogicException("Anomali tespiti hatası: " + e.getMessage());
         }
-        
-        // Get last 3 months bills for comparison
-        List<Bill> previousBills = getPreviousBills(request.getUserId(), request.getPeriod(), 3);
-        
-        List<AnomalyDTO> anomalies = new ArrayList<>();
-        
-        // Detect total amount anomalies
-        anomalies.addAll(detectTotalAmountAnomalies(currentBill, previousBills));
-        
-        // Detect category-based anomalies
-        anomalies.addAll(detectCategoryAnomalies(currentBill, previousBills));
-        
-        // Detect new items anomalies
-        anomalies.addAll(detectNewItemsAnomalies(currentBill, previousBills));
-        
-        // Detect roaming anomalies
-        anomalies.addAll(detectRoamingAnomalies(currentBill, previousBills));
-        
-        // Detect premium SMS anomalies
-        anomalies.addAll(detectPremiumSMSAnomalies(currentBill, previousBills));
-        
-        // Detect VAS anomalies
-        anomalies.addAll(detectVASAnomalies(currentBill, previousBills));
-        
-        return AnomalyResponseDTO.builder()
-                .anomalies(anomalies)
-                .totalAnomalies(anomalies.size())
-                .period(request.getPeriod())
-                .userId(request.getUserId())
-                .build();
     }
 
     @Override
@@ -149,13 +145,11 @@ public class AnomalyServiceImpl implements AnomalyService {
         if (percentageChange.compareTo(new BigDecimal("80")) > 0) {
             anomalies.add(AnomalyDTO.builder()
                     .type(AnomalyType.SPIKE)
-                    .category("total_amount")
+                    .category(ItemCategory.ONE_OFF.name())
                     .delta(difference)
                     .percentageChange(percentageChange)
-                    .reason(String.format("Önceki ortalama %.2f TL iken bu ay %.2f TL (%%%.1f artış)", 
-                            previousTotal, currentTotal, percentageChange))
-                    .suggestedAction("Fatura detaylarını inceleyin ve beklenmedik kalemleri kontrol edin")
-                    .severity("HIGH")
+                    .reason(String.format("Fatura tutarında %s%% artış", percentageChange.setScale(1, RoundingMode.HALF_UP)))
+                    .suggestedAction("Fatura detaylarını inceleyin")
                     .build());
         }
         
@@ -186,67 +180,54 @@ public class AnomalyServiceImpl implements AnomalyService {
     private List<AnomalyDTO> detectCategoryAnomalies(Bill currentBill, List<Bill> previousBills) {
         List<AnomalyDTO> anomalies = new ArrayList<>();
         
-        if (previousBills.isEmpty()) {
-            return anomalies;
-        }
+        if (previousBills.isEmpty()) return anomalies;
         
-        // Get current bill items by category
-        List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
-        Map<ItemCategory, BigDecimal> currentCategoryTotals = currentItems.stream()
-                .collect(Collectors.groupingBy(
-                    BillItem::getCategory,
-                    Collectors.reducing(BigDecimal.ZERO, BillItem::getAmount, BigDecimal::add)
-                ));
+        // Get current bill items grouped by category
+        Map<ItemCategory, List<BillItem>> currentItemsByCategory = billItemRepository
+                .findByBill_BillId(currentBill.getBillId())
+                .stream()
+                .collect(Collectors.groupingBy(BillItem::getCategory));
         
-        // Calculate previous category averages
-        Map<ItemCategory, BigDecimal> previousCategoryAverages = new HashMap<>();
-        for (ItemCategory category : ItemCategory.values()) {
-            BigDecimal total = BigDecimal.ZERO;
-            int count = 0;
-            
-            for (Bill bill : previousBills) {
-                List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-                BigDecimal categoryTotal = items.stream()
-                        .filter(item -> category.equals(item.getCategory()))
-                        .map(BillItem::getAmount)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                
-                if (categoryTotal.compareTo(BigDecimal.ZERO) > 0) {
-                    total = total.add(categoryTotal);
-                    count++;
-                }
-            }
-            
-            if (count > 0) {
-                previousCategoryAverages.put(category, total.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP));
+        // Get previous bills items grouped by category
+        Map<ItemCategory, List<BillItem>> previousItemsByCategory = new HashMap<>();
+        for (Bill bill : previousBills) {
+            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
+            for (BillItem item : items) {
+                previousItemsByCategory.computeIfAbsent(item.getCategory(), k -> new ArrayList<>()).add(item);
             }
         }
         
-        // Detect category anomalies
-        for (Map.Entry<ItemCategory, BigDecimal> entry : currentCategoryTotals.entrySet()) {
+        // Compare each category
+        for (Map.Entry<ItemCategory, List<BillItem>> entry : currentItemsByCategory.entrySet()) {
             ItemCategory category = entry.getKey();
-            BigDecimal currentAmount = entry.getValue();
-            BigDecimal previousAverage = previousCategoryAverages.get(category);
+            List<BillItem> currentItems = entry.getValue();
             
-            if (previousAverage != null && previousAverage.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal difference = currentAmount.subtract(previousAverage);
-                BigDecimal percentageChange = difference.divide(previousAverage, 4, RoundingMode.HALF_UP)
+            BigDecimal currentTotal = currentItems.stream()
+                    .map(BillItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            List<BillItem> previousItems = previousItemsByCategory.getOrDefault(category, new ArrayList<>());
+            BigDecimal previousTotal = previousItems.stream()
+                    .map(BillItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            if (previousTotal.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal difference = currentTotal.subtract(previousTotal);
+                BigDecimal percentageChange = difference.divide(previousTotal, 4, RoundingMode.HALF_UP)
                         .multiply(new BigDecimal("100"));
                 
-                // Detect significant increases (>100% for most categories, >50% for premium services)
-                BigDecimal threshold = (category == ItemCategory.PREMIUM_SMS || category == ItemCategory.VAS) 
-                        ? new BigDecimal("50") : new BigDecimal("100");
-                
-                if (percentageChange.compareTo(threshold) > 0) {
+                // Detect significant changes (>50% increase or decrease)
+                if (percentageChange.abs().compareTo(new BigDecimal("50")) > 0) {
                     anomalies.add(AnomalyDTO.builder()
-                            .type(AnomalyType.CATEGORY_SPIKE)
-                            .category(category.name().toLowerCase())
-                            .delta(difference)
-                            .percentageChange(percentageChange)
-                            .reason(String.format("%s kategorisinde önceki ortalama %.2f TL iken bu ay %.2f TL (%%%.1f artış)", 
-                                    category.name().toLowerCase(), previousAverage, currentAmount, percentageChange))
-                            .suggestedAction(String.format("%s kullanımınızı gözden geçirin", category.name().toLowerCase()))
-                            .severity("MEDIUM")
+                            .type(percentageChange.compareTo(BigDecimal.ZERO) > 0 ? AnomalyType.SPIKE : AnomalyType.NEW_ITEM)
+                            .category(category.name())
+                            .delta(difference.abs())
+                            .percentageChange(percentageChange.abs())
+                            .reason(String.format("%s kategorisinde %s%% %s", 
+                                    category.name().toLowerCase(), 
+                                    percentageChange.abs().setScale(1, RoundingMode.HALF_UP),
+                                    percentageChange.compareTo(BigDecimal.ZERO) > 0 ? "artış" : "azalış"))
+                            .suggestedAction("Bu kategorideki değişikliği kontrol edin")
                             .build());
                 }
             }
@@ -258,34 +239,27 @@ public class AnomalyServiceImpl implements AnomalyService {
     private List<AnomalyDTO> detectNewItemsAnomalies(Bill currentBill, List<Bill> previousBills) {
         List<AnomalyDTO> anomalies = new ArrayList<>();
         
-        if (previousBills.isEmpty()) {
-            return anomalies;
-        }
+        if (previousBills.isEmpty()) return anomalies;
         
-        // Get current bill items
+        // Get all item subtypes from previous bills
+        Set<String> previousSubtypes = previousBills.stream()
+                .flatMap(bill -> billItemRepository.findByBill_BillId(bill.getBillId()).stream())
+                .map(BillItem::getSubtype)
+                .collect(Collectors.toSet());
+        
+        // Check for new subtypes in current bill
         List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
         
-        // Get all previous bill items
-        Set<String> previousItemTypes = new HashSet<>();
-        for (Bill bill : previousBills) {
-            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-            for (BillItem item : items) {
-                previousItemTypes.add(item.getSubtype());
-            }
-        }
-        
-        // Detect new item types
-        for (BillItem currentItem : currentItems) {
-            if (!previousItemTypes.contains(currentItem.getSubtype())) {
+        for (BillItem item : currentItems) {
+            if (!previousSubtypes.contains(item.getSubtype())) {
                 anomalies.add(AnomalyDTO.builder()
+                        .category(item.getCategory().name())
+                        .subtype(item.getSubtype())
+                        .delta(item.getAmount())
+                        .percentageChange(BigDecimal.valueOf(100))
+                        .reason("Bu kalem ilk kez görüldü")
+                        .suggestedAction("Kalemin neden eklendiğini kontrol edin")
                         .type(AnomalyType.NEW_ITEM)
-                        .category(currentItem.getCategory().name().toLowerCase())
-                        .subtype(currentItem.getSubtype())
-                        .delta(currentItem.getAmount())
-                        .reason(String.format("İlk kez görülen kalem: %s (%.2f TL)", 
-                                currentItem.getDescription(), currentItem.getAmount()))
-                        .suggestedAction("Bu kalemin neden oluştuğunu kontrol edin")
-                        .severity("LOW")
                         .build());
             }
         }
@@ -296,41 +270,36 @@ public class AnomalyServiceImpl implements AnomalyService {
     private List<AnomalyDTO> detectRoamingAnomalies(Bill currentBill, List<Bill> previousBills) {
         List<AnomalyDTO> anomalies = new ArrayList<>();
         
-        if (previousBills.isEmpty()) {
-            return anomalies;
-        }
+        if (previousBills.isEmpty()) return anomalies;
         
-        // Check if roaming was activated this month
-        List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
-        BigDecimal currentRoaming = currentItems.stream()
-                .filter(item -> ItemCategory.ROAMING.equals(item.getCategory()))
-                .map(BillItem::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Check if roaming was activated
+        List<BillItem> currentRoamingItems = billItemRepository.findByBill_BillId(currentBill.getBillId())
+                .stream()
+                .filter(item -> item.getCategory() == ItemCategory.ROAMING)
+                .collect(Collectors.toList());
         
-        // Check if there was no roaming in previous months
-        boolean hadRoamingBefore = false;
-        for (Bill bill : previousBills) {
-            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-            BigDecimal roamingAmount = items.stream()
-                    .filter(item -> ItemCategory.ROAMING.equals(item.getCategory()))
-                    .map(BillItem::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (!currentRoamingItems.isEmpty()) {
+            // Check if there was roaming in previous months
+            boolean hadRoamingBefore = previousBills.stream()
+                    .anyMatch(bill -> billItemRepository.findByBill_BillId(bill.getBillId())
+                            .stream()
+                            .anyMatch(item -> item.getCategory() == ItemCategory.ROAMING));
             
-            if (roamingAmount.compareTo(BigDecimal.ZERO) > 0) {
-                hadRoamingBefore = true;
-                break;
+            if (!hadRoamingBefore) {
+                BigDecimal totalRoaming = currentRoamingItems.stream()
+                        .map(BillItem::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                
+                anomalies.add(AnomalyDTO.builder()
+                        .category(ItemCategory.ROAMING.name())
+                        .subtype("roaming_activation")
+                        .delta(totalRoaming)
+                        .percentageChange(BigDecimal.valueOf(100))
+                        .reason("Roaming servisi bu ay aktif edildi")
+                        .suggestedAction("Roaming kullanımını kontrol edin ve gerekirse kapatın")
+                        .type(AnomalyType.ROAMING_ACTIVATION)
+                        .build());
             }
-        }
-        
-        if (currentRoaming.compareTo(BigDecimal.ZERO) > 0 && !hadRoamingBefore) {
-            anomalies.add(AnomalyDTO.builder()
-                    .type(AnomalyType.ROAMING_ACTIVATION)
-                    .category("roaming")
-                    .delta(currentRoaming)
-                    .reason("Yeni roaming aktivasyonu tespit edildi")
-                    .suggestedAction("Roaming kullanımınızı kontrol edin ve gerekirse kapatın")
-                    .severity("MEDIUM")
-                    .build());
         }
         
         return anomalies;
@@ -339,51 +308,43 @@ public class AnomalyServiceImpl implements AnomalyService {
     private List<AnomalyDTO> detectPremiumSMSAnomalies(Bill currentBill, List<Bill> previousBills) {
         List<AnomalyDTO> anomalies = new ArrayList<>();
         
-        if (previousBills.isEmpty()) {
-            return anomalies;
-        }
+        if (previousBills.isEmpty()) return anomalies;
         
-        // Calculate current premium SMS total
-        List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
-        BigDecimal currentPremiumSMS = currentItems.stream()
-                .filter(item -> ItemCategory.PREMIUM_SMS.equals(item.getCategory()))
+        // Calculate average Premium SMS amount from previous months
+        List<BigDecimal> previousPremiumSMSAmounts = previousBills.stream()
+                .map(bill -> billItemRepository.findByBill_BillId(bill.getBillId())
+                        .stream()
+                        .filter(item -> item.getCategory() == ItemCategory.PREMIUM_SMS)
+                        .map(BillItem::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .collect(Collectors.toList());
+        
+        BigDecimal averagePremiumSMS = previousPremiumSMSAmounts.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(previousPremiumSMSAmounts.size()), 2, RoundingMode.HALF_UP);
+        
+        // Get current Premium SMS amount
+        BigDecimal currentPremiumSMS = billItemRepository.findByBill_BillId(currentBill.getBillId())
+                .stream()
+                .filter(item -> item.getCategory() == ItemCategory.PREMIUM_SMS)
                 .map(BillItem::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        // Calculate previous premium SMS average
-        BigDecimal previousPremiumSMS = BigDecimal.ZERO;
-        int count = 0;
-        
-        for (Bill bill : previousBills) {
-            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-            BigDecimal premiumSMSTotal = items.stream()
-                    .filter(item -> ItemCategory.PREMIUM_SMS.equals(item.getCategory()))
-                    .map(BillItem::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Check for significant increase (more than 80% increase)
+        if (averagePremiumSMS.compareTo(BigDecimal.ZERO) > 0 && currentPremiumSMS.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal increase = currentPremiumSMS.subtract(averagePremiumSMS);
+            BigDecimal percentageIncrease = increase.divide(averagePremiumSMS, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
             
-            if (premiumSMSTotal.compareTo(BigDecimal.ZERO) > 0) {
-                previousPremiumSMS = previousPremiumSMS.add(premiumSMSTotal);
-                count++;
-            }
-        }
-        
-        if (count > 0 && currentPremiumSMS.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal previousAverage = previousPremiumSMS.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP);
-            BigDecimal difference = currentPremiumSMS.subtract(previousAverage);
-            BigDecimal percentageChange = difference.divide(previousAverage, 4, RoundingMode.HALF_UP)
-                    .multiply(new BigDecimal("100"));
-            
-            // Detect significant increase (>80%)
-            if (percentageChange.compareTo(new BigDecimal("80")) > 0) {
+            if (percentageIncrease.compareTo(BigDecimal.valueOf(80)) > 0) {
                 anomalies.add(AnomalyDTO.builder()
+                        .category(ItemCategory.PREMIUM_SMS.name())
+                        .subtype("premium_sms_increase")
+                        .delta(increase)
+                        .percentageChange(percentageIncrease)
+                        .reason(String.format("Premium SMS ücreti %s%% arttı", percentageIncrease))
+                        .suggestedAction("Premium SMS kullanımını kontrol edin ve gerekirse engelleyin")
                         .type(AnomalyType.PREMIUM_SMS_INCREASE)
-                        .category("premium_sms")
-                        .delta(difference)
-                        .percentageChange(percentageChange)
-                        .reason(String.format("Premium SMS ücreti önceki ortalama %.2f TL iken bu ay %.2f TL (%%%.1f artış)", 
-                                previousAverage, currentPremiumSMS, percentageChange))
-                        .suggestedAction("Premium SMS kullanımınızı kontrol edin ve gerekirse engelleyin")
-                        .severity("HIGH")
                         .build());
             }
         }
@@ -394,53 +355,75 @@ public class AnomalyServiceImpl implements AnomalyService {
     private List<AnomalyDTO> detectVASAnomalies(Bill currentBill, List<Bill> previousBills) {
         List<AnomalyDTO> anomalies = new ArrayList<>();
         
-        if (previousBills.isEmpty()) {
-            return anomalies;
-        }
+        if (previousBills.isEmpty()) return anomalies;
         
-        // Calculate current VAS total (excluding plan fee)
-        List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
-        BigDecimal currentVAS = currentItems.stream()
-                .filter(item -> ItemCategory.VAS.equals(item.getCategory()) && !"plan_fee".equals(item.getSubtype()))
-                .map(BillItem::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Get current VAS items (excluding plan fee)
+        List<BillItem> currentVASItems = billItemRepository.findByBill_BillId(currentBill.getBillId())
+                .stream()
+                .filter(item -> item.getCategory() == ItemCategory.VAS && !"plan_fee".equals(item.getSubtype()))
+                .collect(Collectors.toList());
         
-        // Calculate previous VAS average
-        BigDecimal previousVAS = BigDecimal.ZERO;
-        int count = 0;
+        // Get previous VAS items
+        Set<String> previousVASSubtypes = previousBills.stream()
+                .flatMap(bill -> billItemRepository.findByBill_BillId(bill.getBillId()).stream())
+                .filter(item -> item.getCategory() == ItemCategory.VAS && !"plan_fee".equals(item.getSubtype()))
+                .map(BillItem::getSubtype)
+                .collect(Collectors.toSet());
         
-        for (Bill bill : previousBills) {
-            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-            BigDecimal vasTotal = items.stream()
-                    .filter(item -> ItemCategory.VAS.equals(item.getCategory()) && !"plan_fee".equals(item.getSubtype()))
-                    .map(BillItem::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            
-            if (vasTotal.compareTo(BigDecimal.ZERO) > 0) {
-                previousVAS = previousVAS.add(vasTotal);
-                count++;
-            }
-        }
-        
-        if (count > 0 && currentVAS.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal previousAverage = previousVAS.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP);
-            BigDecimal difference = currentVAS.subtract(previousAverage);
-            BigDecimal percentageChange = difference.divide(previousAverage, 4, RoundingMode.HALF_UP)
-                    .multiply(new BigDecimal("100"));
-            
-            // Detect significant increase (>50%)
-            if (percentageChange.compareTo(new BigDecimal("50")) > 0) {
+        // Check for new VAS services
+        for (BillItem item : currentVASItems) {
+            if (!previousVASSubtypes.contains(item.getSubtype())) {
                 anomalies.add(AnomalyDTO.builder()
-                        .type(AnomalyType.VAS_INCREASE)
-                        .category("vas")
-                        .delta(difference)
-                        .percentageChange(percentageChange)
-                        .reason(String.format("VAS ücreti önceki ortalama %.2f TL iken bu ay %.2f TL (%%%.1f artış)", 
-                                previousAverage, currentVAS, percentageChange))
-                        .suggestedAction("Kullanmadığınız VAS hizmetlerini iptal edin")
-                        .severity("MEDIUM")
+                        .category(ItemCategory.VAS.name())
+                        .subtype(item.getSubtype())
+                        .delta(item.getAmount())
+                        .percentageChange(BigDecimal.valueOf(100))
+                        .reason("Yeni VAS servisi aktif edildi: " + item.getDescription())
+                        .suggestedAction("Bu servisi gerçekten kullanıyor musunuz? Kontrol edin")
+                        .type(AnomalyType.NEW_ITEM)
                         .build());
             }
+        }
+        
+        return anomalies;
+    }
+
+    private List<AnomalyDTO> detectSpikeAnomalies(Bill currentBill, List<Bill> previousBills) {
+        List<AnomalyDTO> anomalies = new ArrayList<>();
+        
+        if (previousBills.isEmpty()) return anomalies;
+        
+        // Calculate average and standard deviation for total amount
+        List<BigDecimal> amounts = previousBills.stream()
+                .map(Bill::getTotalAmount)
+                .collect(Collectors.toList());
+        
+        BigDecimal average = amounts.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(amounts.size()), 2, RoundingMode.HALF_UP);
+        
+        BigDecimal variance = amounts.stream()
+                .map(amount -> amount.subtract(average).pow(2))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(amounts.size()), 2, RoundingMode.HALF_UP);
+        
+        BigDecimal stdDev = BigDecimal.valueOf(Math.sqrt(variance.doubleValue()));
+        BigDecimal threshold = average.add(stdDev.multiply(BigDecimal.valueOf(2)));
+        
+        if (currentBill.getTotalAmount().compareTo(threshold) > 0) {
+            BigDecimal delta = currentBill.getTotalAmount().subtract(average);
+            BigDecimal percentageChange = delta.divide(average, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+            
+            anomalies.add(AnomalyDTO.builder()
+                    .category(ItemCategory.ONE_OFF.name())
+                    .subtype("total_amount_spike")
+                    .delta(delta)
+                    .percentageChange(percentageChange)
+                    .reason(String.format("Önceki ortalama %s TL iken bu ay %s TL", average, currentBill.getTotalAmount()))
+                    .suggestedAction("Fatura detaylarını inceleyerek artış nedenini bulun")
+                    .type(AnomalyType.SPIKE)
+                    .build());
         }
         
         return anomalies;
@@ -466,9 +449,7 @@ public class AnomalyServiceImpl implements AnomalyService {
     }
 
     private List<Bill> getLastMonthsBills(Long userId, int months) {
-        LocalDate endDate = LocalDate.now();
-        LocalDate startDate = endDate.minusMonths(months);
-        
-        return billRepository.findByUser_UserIdAndPeriodStartBetween(userId, startDate, endDate);
+        LocalDate startDate = LocalDate.now().minusMonths(months);
+        return billRepository.findRecentBillsByUserId(userId, startDate);
     }
 }

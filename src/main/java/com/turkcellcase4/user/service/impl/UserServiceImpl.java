@@ -10,6 +10,8 @@ import com.turkcellcase4.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import com.turkcellcase4.common.exception.BusinessLogicException;
+import com.turkcellcase4.common.exception.ResourceNotFoundException;
 
 import java.util.List;
 
@@ -25,7 +27,7 @@ public class UserServiceImpl implements UserService {
     public UserResponseDTO getUserById(Long userId) {
         log.info("Getting user by ID: {}", userId);
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı: " + userId));
         return userMapper.toUserResponseDTO(user);
     }
 
@@ -40,7 +42,7 @@ public class UserServiceImpl implements UserService {
     public UserResponseDTO getUserByMsisdn(String msisdn) {
         log.info("Getting user by MSISDN: {}", msisdn);
         User user = userRepository.findByMsisdn(msisdn)
-                .orElseThrow(() -> new RuntimeException("User not found with MSISDN: " + msisdn));
+                .orElseThrow(() -> new ResourceNotFoundException("MSISDN ile kullanıcı bulunamadı: " + msisdn));
         return userMapper.toUserResponseDTO(user);
     }
 
@@ -63,23 +65,31 @@ public class UserServiceImpl implements UserService {
     public UserResponseDTO updateUser(Long userId, User user) {
         log.info("Updating user with ID: {}", userId);
         User existingUser = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Güncellenecek kullanıcı bulunamadı: " + userId));
         
-        existingUser.setName(user.getName());
-        existingUser.setCurrentPlanId(user.getCurrentPlanId());
-        existingUser.setType(user.getType());
-        existingUser.setMsisdn(user.getMsisdn());
-        
-        User updatedUser = userRepository.save(existingUser);
-        return userMapper.toUserResponseDTO(updatedUser);
+        try {
+            existingUser.setName(user.getName());
+            existingUser.setCurrentPlanId(user.getCurrentPlanId());
+            existingUser.setType(user.getType());
+            existingUser.setMsisdn(user.getMsisdn());
+            
+            User updatedUser = userRepository.save(existingUser);
+            return userMapper.toUserResponseDTO(updatedUser);
+        } catch (Exception e) {
+            throw new BusinessLogicException("Kullanıcı güncelleme hatası: " + e.getMessage());
+        }
     }
 
     @Override
     public void deleteUser(Long userId) {
         log.info("Deleting user with ID: {}", userId);
         if (!userRepository.existsById(userId)) {
-            throw new RuntimeException("User not found with ID: " + userId);
+            throw new ResourceNotFoundException("Silinecek kullanıcı bulunamadı: " + userId);
         }
-        userRepository.deleteById(userId);
+        try {
+            userRepository.deleteById(userId);
+        } catch (Exception e) {
+            throw new BusinessLogicException("Kullanıcı silme hatası: " + e.getMessage());
+        }
     }
 }

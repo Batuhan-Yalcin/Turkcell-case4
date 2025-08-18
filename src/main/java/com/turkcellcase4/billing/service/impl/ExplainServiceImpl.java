@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.turkcellcase4.common.exception.BusinessLogicException;
+import com.turkcellcase4.common.exception.ResourceNotFoundException;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +40,7 @@ public class ExplainServiceImpl implements ExplainService {
         log.info("Explaining bill: {}", request.getBillId());
         
         Bill bill = billRepository.findById(request.getBillId())
-                .orElseThrow(() -> new RuntimeException("Bill not found with ID: " + request.getBillId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Fatura bulunamadı: " + request.getBillId()));
         
         BillSummaryDTO summary = getBillSummary(request.getBillId());
         List<CategoryBreakdownDTO> breakdown = getCategoryBreakdowns(request.getBillId());
@@ -54,38 +56,42 @@ public class ExplainServiceImpl implements ExplainService {
     @Override
     public BillSummaryDTO getBillSummary(Long billId) {
         Bill bill = billRepository.findById(billId)
-                .orElseThrow(() -> new RuntimeException("Bill not found with ID: " + billId));
+                .orElseThrow(() -> new ResourceNotFoundException("Fatura bulunamadı: " + billId));
         
-        List<BillItem> items = billItemRepository.findByBill_BillId(billId);
-        
-        BigDecimal totalAmount = bill.getTotalAmount();
-        BigDecimal taxes = items.stream()
-                .filter(item -> ItemCategory.TAX.equals(item.getCategory()))
-                .map(BillItem::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal usageBasedCharges = items.stream()
-                .filter(item -> ItemCategory.DATA.equals(item.getCategory()) || 
-                               ItemCategory.VOICE.equals(item.getCategory()) || 
-                               ItemCategory.SMS.equals(item.getCategory()) ||
-                               ItemCategory.ROAMING.equals(item.getCategory()))
-                .map(BillItem::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal oneTimeCharges = items.stream()
-                .filter(item -> ItemCategory.ONE_OFF.equals(item.getCategory()))
-                .map(BillItem::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        String savingsHint = calculateSavingsHint(items);
-        
-        return BillSummaryDTO.builder()
-                .totalAmount(totalAmount)
-                .taxes(taxes)
-                .usageBasedCharges(usageBasedCharges)
-                .oneTimeCharges(oneTimeCharges)
-                .savingsHint(savingsHint)
-                .build();
+        try {
+            List<BillItem> items = billItemRepository.findByBill_BillId(billId);
+            
+            BigDecimal totalAmount = bill.getTotalAmount();
+            BigDecimal taxes = items.stream()
+                    .filter(item -> ItemCategory.TAX.equals(item.getCategory()))
+                    .map(BillItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            BigDecimal usageBasedCharges = items.stream()
+                    .filter(item -> ItemCategory.DATA.equals(item.getCategory()) || 
+                                   ItemCategory.VOICE.equals(item.getCategory()) || 
+                                   ItemCategory.SMS.equals(item.getCategory()) ||
+                                   ItemCategory.ROAMING.equals(item.getCategory()))
+                    .map(BillItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            BigDecimal oneTimeCharges = items.stream()
+                    .filter(item -> ItemCategory.ONE_OFF.equals(item.getCategory()))
+                    .map(BillItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            String savingsHint = calculateSavingsHint(items);
+            
+            return BillSummaryDTO.builder()
+                    .totalAmount(totalAmount)
+                    .taxes(taxes)
+                    .usageBasedCharges(usageBasedCharges)
+                    .oneTimeCharges(oneTimeCharges)
+                    .savingsHint(savingsHint)
+                    .build();
+        } catch (Exception e) {
+            throw new BusinessLogicException("Fatura özeti oluşturma hatası: " + e.getMessage());
+        }
     }
 
     @Override

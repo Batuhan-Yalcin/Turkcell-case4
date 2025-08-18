@@ -25,6 +25,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.turkcellcase4.common.exception.BusinessLogicException;
+import com.turkcellcase4.common.exception.ResourceNotFoundException;
 
 @Service
 @RequiredArgsConstructor
@@ -42,31 +44,38 @@ public class SimulationServiceImpl implements SimulationService {
     public SimulationResponseDTO simulateScenario(SimulationRequestDTO request) {
         log.info("Simulating scenario for user: {} and period: {}", request.getUserId(), request.getPeriod());
         
-        // Validate user and get current bill
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        Bill currentBill = getCurrentBill(request.getUserId(), request.getPeriod());
-        if (currentBill == null) {
-            throw new RuntimeException("No bill found for the specified period");
+        try {
+            // Validate user and get current bill
+            User user = userRepository.findById(request.getUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı: " + request.getUserId()));
+            
+            Bill currentBill = getCurrentBill(request.getUserId(), request.getPeriod());
+            if (currentBill == null) {
+                throw new ResourceNotFoundException("Belirtilen dönem için fatura bulunamadı");
+            }
+            
+            BigDecimal currentTotal = currentBill.getTotalAmount();
+            SimulationScenarioDTO scenario = request.getScenario();
+            
+            // Calculate new total based on scenario
+            BigDecimal newTotal = calculateNewTotal(currentBill, scenario, request.getUserId(), request.getPeriod());
+            BigDecimal savings = currentTotal.subtract(newTotal);
+            
+            // Generate detailed breakdown
+            String details = generateScenarioDetails(scenario, newTotal, savings);
+            
+            return SimulationResponseDTO.builder()
+                    .newTotal(newTotal)
+                    .saving(savings)
+                    .details(details)
+                    .scenario(scenario)
+                    .build();
+        } catch (Exception e) {
+            if (e instanceof ResourceNotFoundException) {
+                throw e;
+            }
+            throw new BusinessLogicException("Senaryo simülasyonu hatası: " + e.getMessage());
         }
-        
-        BigDecimal currentTotal = currentBill.getTotalAmount();
-        SimulationScenarioDTO scenario = request.getScenario();
-        
-        // Calculate new total based on scenario
-        BigDecimal newTotal = calculateNewTotal(currentBill, scenario, request.getUserId(), request.getPeriod());
-        BigDecimal savings = currentTotal.subtract(newTotal);
-        
-        // Generate detailed breakdown
-        String details = generateScenarioDetails(scenario, newTotal, savings);
-        
-        return SimulationResponseDTO.builder()
-                .newTotal(newTotal)
-                .saving(savings)
-                .details(details)
-                .scenario(scenario)
-                .build();
     }
 
     @Override

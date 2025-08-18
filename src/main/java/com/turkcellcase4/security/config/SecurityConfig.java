@@ -1,5 +1,6 @@
 package com.turkcellcase4.security.config;
 
+import com.turkcellcase4.security.jwt.JwtAuthenticationEntryPoint;
 import com.turkcellcase4.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -24,6 +26,8 @@ import java.util.Arrays;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final JwtAuthenticationEntryPoint authEntryPoint;
+    private final AccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -31,15 +35,21 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/users/**").permitAll()
-                .requestMatchers("/api/bills/**").permitAll()
-                .requestMatchers("/api/explain/**").permitAll()
-                .requestMatchers("/api/anomalies/**").permitAll()
-                .requestMatchers("/api/whatif/**").permitAll()
+                .requestMatchers("/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/register").permitAll()
+                .requestMatchers("/api/auth/refresh").permitAll()
                 .requestMatchers("/api/catalog/**").permitAll()
-                .requestMatchers("/api/checkout/**").permitAll()
+                .requestMatchers("/api/users/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/api/bills/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/api/explain/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/api/anomalies/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/api/whatif/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/api/checkout/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(authEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
             )
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
