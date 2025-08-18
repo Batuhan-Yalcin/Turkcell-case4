@@ -1,0 +1,126 @@
+Codenight Case: Turkcell Fatura Asistanı – Şeffaf Fatura Açıklayıcı, Anomali Avcısı ve “What-If”
+Simülatörü
+Amaç
+Ekipler 10 saat içinde, bir Turkcell müşterisinin aylık faturasını kalem kalem açıklayan,
+beklenmedik ücretleri tespit eden ve “başka paket/seçenekle olsaydı ne olurdu?” sorusuna
+yanıt veren bir web/mobil uygulama geliştirir.
+Araçlar ve teknolojiler serbest; ChatGPT/Copilot/Cursor kullanılabilir.
+İş Senaryosu (Kısa Hikâye)
+“Kullanıcılar faturalarında ‘Ek Ücret’, ‘Premium SMS’, ‘Yurt Dışı Data’ gibi kalemleri gördüğünde
+neden ödediğini anlamakta zorlanıyor. Fatura Asistanı, faturayı veri odaklı açıklar; normal dışı
+kalemleri işaretler; aynı ay için alternatif plan/ek paket senaryolarında toplam maliyeti simüle
+edip en düşük maliyetli seçenekleri önerir.”
+Zorunlu Özellikler (MVP)
+1. Profil & Fatura Seçimi (mock)
+o Kullanıcı seçimi (drop-down) ve döneme göre fatura seçimi.
+o Özet: Toplam Tutar, Vergiler, Kullanım Bazlı Ücretler, Tek Seferlik Ücretler.
+2. Açıklanabilir Fatura
+o Her kalem için: kategori (data/voice/SMS/roaming/premium
+SMS/VAS/vergi/indirim), kısa açıklama ve detay (örn. “07.06’da 2×Premium
+SMS”).
+o Doğal dil özeti: “Bu ay toplam 6,2GB yurt içi, 120dk arama yaptınız. Ücret
+artışının %72’si Premium SMS kaynaklı.”
+3. Anomali Tespiti
+o Basit kurallar + istatistik:
+▪ “Kalem bazında son 3 aya göre %X üstünde”
+▪ “Yeni görünen ücret (ilk kez) → şüpheli”
+▪ “Roaming/Premium SMS/VAS artışı” uyarıları
+o Her anomali için gerekçe (ör. “Önceki ortalama 12 TL iken bu ay 58 TL”).
+4. What-If Simülasyonu
+o Plan değişirse (katalogdan): yeni sabit ücret + aşım ücretleriyle alternatif toplam
+maliyet.
+o Ek paket eklenseydi: (örn. “Sosyal 5GB”) aşımın bir kısmı düşer → yeni toplam.
+o Premium SMS/VAS iptal edilmiş olsaydı: ilgili kalemler hariç tekrar hesapla.
+o En düşük maliyetli 3 senaryoyu sırala ve tasarruf tutarını göster.
+5. Akışlar (Mock)
+o “VAS iptal et” → onay → başarı (mock).
+o “Planı değiştir” veya “Ek paket ekle” → mock checkout.
+6. Sunum
+o 3 dakikalık demo: Faturayı aç → anomalileri gör → What-If çalıştır → en iyi
+seçeneği uygula (mock).
+Veri Setleri
+Ekipler bunları JSON/CSV dosyasından okuyabilir veya DB’ye import edebilir.
+users
+user_id,name,current_plan_id,type,msisdn
+plans
+min,overage_sms
+plan_id,plan_name,type,quota_gb,quota_min,quota_sms,monthly_price,overage_gb,overage_
+bill_headers
+bill_id,user_id,period_start,period_end,issue_date,total_amount,currency
+bill_items
+bill_id,item_id,category,subtype,description,amount,unit_price,quantity,tax_rate,created_at
+• category: data|voice|sms|roaming|premium_sms|vas|one_off|discount|tax
+• subtype örn: data_overage, voice_overage, intl_call, vas_tone, premium_3rdparty vb.
+usage_daily
+user_id,date,mb_used,minutes_used,sms_used,roaming_mb
+vas_catalog
+vas_id,name,monthly_fee,provider
+premium_sms_catalog
+shortcode,provider,unit_price
+add_on_packs
+addon_id,name,type,extra_gb,extra_min,extra_sms,price
+Basit Mantık (Referans)
+1) Fatura Açıklama (Explainability)
+• Gruplama: bill_items → kategori bazlı toplamlar.
+• Satır üretimi:
+o Data aşımı: “Ay içinde {x} GB aşım → {x}×{overage_gb} TL”.
+o Premium SMS: “{shortcode} numarasına {n} SMS → {n}×{unit_price} TL (sağlayıcı:
+{provider})”.
+o VAS: “{name} servisi aylık ücret {monthly_fee} TL”.
+2) Anomali Kuralları
+• Z-score veya % fark: this_month > mean(last_3) + 2σ veya %Δ > 80%.
+• Yeni Kalem: son 3 ay yok → “ilk kez görüldü”.
+• Roaming: roaming_mb > 0 & önceki ay 0 → “yeni roaming”.
+3) What-If Simülatörü
+• Plan değişikliği: new_total = new_plan.monthly_price + max(0, usage_gb -
+quota_gb)*overage_gb + ...
+• Ek paket: effective_quota_gb = quota_gb + Σ(addons.extra_gb)
+• VAS/Premium SMS kapalı: ilgili kalemler toplamdan çıkarılır.
+• Skor: en düşük new_total + **tasarruf = current_total - new_total`.
+API Sözleşmesi (Örnek)
+GET /api/users/{id}
+-> 200: { user_id, name, current_plan, msisdn }
+GET /api/bills/{user_id}?period=YYYY-MM
+-> 200: { bill: {...header}, items: [ ... ] }
+GET /api/catalog
+-> 200: { plans:[...], addons:[...], vas:[...], premium_sms:[...] }
+POST /api/explain
+BODY: { bill_id }
+-> 200: { summary:{total, taxes, savings_hint}, breakdown:[{category,total,lines:[...] }] }
+POST /api/anomalies
+BODY: { user_id, period }
+-> 200: { anomalies:[{category,delta,reason,suggested_action}] }
+POST /api/whatif
+BODY: { user_id, period, scenario:{ plan_id?, addons?:[], disable_vas?:true,
+block_premium_sms?:true } }
+-> 200: { new_total, saving, details }
+POST /api/checkout (mock)
+BODY: { user_id, actions:[{type:"change_plan"| "add_addon"| "cancel_vas"|
+"block_premium_sms", payload:{...}}] }
+-> 201: { status:"ok", order_id:"MOCK-FT-123" }
+cURL örnekleri
+curl -s "http://localhost:8000/api/bills/1001?period=2025-07"
+curl -s -X POST http://localhost:8000/api/explain -H "Content-Type: application/json" -d
+'{"bill_id":700101}'
+curl -s -X POST http://localhost:8000/api/whatif -H "Content-Type: application/json" -d
+'{"user_id":1001,"period":"2025-
+07","scenario":{"plan_id":3,"addons":[101],"disable_vas":true}}'
+UI/UX Beklentileri
+• Fatura Özeti Kartı: Toplam, Vergiler, Tasarruf Fırsatları.
+• Kalem Listesi: kategori renkleri, tooltip ile açıklama.
+• Anomali Etiketleri: “Yeni”, “%+180” rozetleri.
+• What-If Paneli: plan/ek paket/premium-SMS/vas anahtarları → anında yeni toplam.
+• Tasarruf göstergesi: “Bu senaryoyla -87 TL daha az ödersin”.
+• Karanlık/Aydınlık tema, klavye erişilebilirliği.
+Bonus (İsteğe Bağlı)
+• “Neden bu anomali oldu?” LLM açıklaması (2-3 cümle).
+• Kohort kıyası: benzer kullanıcıların ortalamasına göre fark.
+• Vergi ayrıştırma ve birim maliyet grafikleri.
+• Otomatik “autofix” önerisi: tek tıkla en iyi senaryo + gerekçe.
+Puanlama Kriterleri (Toplam 100)
+• Kod Kalitesi (30): katmanlar, testler, hata/edge case.
+• Doğruluk & Açıklanabilirlik (20): kalem eşleşmesi, doğal dil açıklamalarının tutarlılığı.
+• Analitik (15): anomali kuralları, z-score/karşılaştırma.
+• UI/UX (20): okunabilirlik, boş durumlar, yükleniyor/başarısız durumları.
+• Özellik Tamamlığı (10): MVP akışlarının çalışır olması.
+• Bonus (5): LLM açıklamaları, kohort, autofix.
