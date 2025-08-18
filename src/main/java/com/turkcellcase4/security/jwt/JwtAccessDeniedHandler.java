@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Component
 @Slf4j
@@ -24,7 +25,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         response.setContentType("application/json");
 
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.FORBIDDEN.value())
                 .error("Forbidden")
                 .message("Erişim reddedildi")

@@ -35,16 +35,16 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login").permitAll()
-                .requestMatchers("/api/auth/register").permitAll()
-                .requestMatchers("/api/auth/refresh").permitAll()
-                .requestMatchers("/api/catalog/**").permitAll()
-                .requestMatchers("/api/users/**").hasAnyRole("USER","ADMIN")
-                .requestMatchers("/api/bills/**").hasAnyRole("USER","ADMIN")
-                .requestMatchers("/api/explain/**").hasAnyRole("USER","ADMIN")
-                .requestMatchers("/api/anomalies/**").hasAnyRole("USER","ADMIN")
-                .requestMatchers("/api/whatif/**").hasAnyRole("USER","ADMIN")
-                .requestMatchers("/api/checkout/**").hasRole("ADMIN")
+                .requestMatchers("/auth/login").permitAll()
+                .requestMatchers("/auth/register").permitAll()
+                .requestMatchers("/auth/refresh").permitAll()
+                .requestMatchers("/catalog/**").permitAll()
+                .requestMatchers("/users/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/bills/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/explain/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/anomalies/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/whatif/**").hasAnyRole("USER","ADMIN")
+                .requestMatchers("/checkout/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
@@ -54,7 +54,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            ;
 
         return http.build();
     }

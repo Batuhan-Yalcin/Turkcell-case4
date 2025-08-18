@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,7 +23,7 @@ public class GlobalExceptionHandler {
             ResourceNotFoundException ex, WebRequest request) {
         log.error("Resource not found: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.NOT_FOUND.value())
                 .error("Not Found")
                 .message(ex.getMessage())
@@ -36,7 +37,7 @@ public class GlobalExceptionHandler {
             ValidationException ex, WebRequest request) {
         log.error("Validation error: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Bad Request")
                 .message(ex.getMessage())
@@ -50,7 +51,7 @@ public class GlobalExceptionHandler {
             BusinessLogicException ex, WebRequest request) {
         log.error("Business logic error: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.UNPROCESSABLE_ENTITY.value())
                 .error("Unprocessable Entity")
                 .message(ex.getMessage())
@@ -72,7 +73,7 @@ public class GlobalExceptionHandler {
         });
 
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error("Validation Failed")
                 .message("Input validation failed")
@@ -87,7 +88,7 @@ public class GlobalExceptionHandler {
             Exception ex, WebRequest request) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);
         ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .error("Internal Server Error")
                 .message("An unexpected error occurred")

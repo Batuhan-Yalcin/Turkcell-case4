@@ -24,9 +24,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
 
+    private boolean isPublicEndpoint(String requestURI) {
+        return requestURI.startsWith("/api/auth/") || 
+               requestURI.startsWith("/api/catalog/");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        
+        // Public endpoint'lerde JWT kontrolü yapma
+        if (isPublicEndpoint(request.getRequestURI())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         
         try {
             final String authHeader = request.getHeader("Authorization");
