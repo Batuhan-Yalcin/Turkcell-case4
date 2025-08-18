@@ -1,0 +1,4 @@
+invoice_id,user_id,amount,status
+1,1,120.5,paid
+2,2,80.0,unpaid
+3,3,95.75,paid
