@@ -23,4 +23,14 @@ public interface BillRepository extends JpaRepository<Bill, Long> {
 	
 	@Query("SELECT b FROM Bill b WHERE b.user.userId = :userId ORDER BY b.periodStart DESC")
 	List<Bill> findAllByUserIdOrderByPeriodStartDesc(@Param("userId") Long userId);
+	
+	// N+1 sorgu problemlerini çözmek için batch query'ler
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.billItems WHERE b.billId IN :billIds")
+	List<Bill> findByIdsWithBillItems(@Param("billIds") List<Long> billIds);
+	
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.user WHERE b.billId IN :billIds")
+	List<Bill> findByIdsWithUser(@Param("billIds") List<Long> billIds);
+	
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.billItems LEFT JOIN FETCH b.user WHERE b.billId IN :billIds")
+	List<Bill> findByIdsWithBillItemsAndUser(@Param("billIds") List<Long> billIds);
 }

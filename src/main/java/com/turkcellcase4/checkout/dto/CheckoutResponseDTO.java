@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -20,4 +21,5 @@ public class CheckoutResponseDTO {
     private List<String> validationResults;
     private LocalDateTime timestamp;
     private String message;
+    private Map<String, Object> orderDetails;
 }

@@ -21,4 +21,6 @@ public class SimulationResponseDTO {
     private List<SimulationScenarioDTO> scenarios;
     private List<ScenarioComparisonDTO> comparisons;
     private List<ScenarioComparisonDTO> topScenarios;
+    private List<String> recommendations;
+    private String summary;
 }

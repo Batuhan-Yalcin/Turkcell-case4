@@ -182,20 +182,22 @@ public class AnomalyServiceImpl implements AnomalyService {
         
         if (previousBills.isEmpty()) return anomalies;
         
-        // Get current bill items grouped by category
-        Map<ItemCategory, List<BillItem>> currentItemsByCategory = billItemRepository
-                .findByBill_BillId(currentBill.getBillId())
-                .stream()
+        // Batch query ile tüm bill item'ları tek seferde al
+        List<Long> allBillIds = new ArrayList<>();
+        allBillIds.add(currentBill.getBillId());
+        allBillIds.addAll(previousBills.stream().map(Bill::getBillId).collect(Collectors.toList()));
+        
+        List<BillItem> allItems = billItemRepository.findByBillIdsIn(allBillIds);
+        
+        // Current bill items grouped by category
+        Map<ItemCategory, List<BillItem>> currentItemsByCategory = allItems.stream()
+                .filter(item -> item.getBill().getBillId().equals(currentBill.getBillId()))
                 .collect(Collectors.groupingBy(BillItem::getCategory));
         
-        // Get previous bills items grouped by category
-        Map<ItemCategory, List<BillItem>> previousItemsByCategory = new HashMap<>();
-        for (Bill bill : previousBills) {
-            List<BillItem> items = billItemRepository.findByBill_BillId(bill.getBillId());
-            for (BillItem item : items) {
-                previousItemsByCategory.computeIfAbsent(item.getCategory(), k -> new ArrayList<>()).add(item);
-            }
-        }
+        // Previous bills items grouped by category
+        Map<ItemCategory, List<BillItem>> previousItemsByCategory = allItems.stream()
+                .filter(item -> !item.getBill().getBillId().equals(currentBill.getBillId()))
+                .collect(Collectors.groupingBy(BillItem::getCategory));
         
         // Compare each category
         for (Map.Entry<ItemCategory, List<BillItem>> entry : currentItemsByCategory.entrySet()) {
@@ -241,14 +243,23 @@ public class AnomalyServiceImpl implements AnomalyService {
         
         if (previousBills.isEmpty()) return anomalies;
         
+        // Batch query ile tüm bill item'ları tek seferde al
+        List<Long> allBillIds = new ArrayList<>();
+        allBillIds.add(currentBill.getBillId());
+        allBillIds.addAll(previousBills.stream().map(Bill::getBillId).collect(Collectors.toList()));
+        
+        List<BillItem> allItems = billItemRepository.findByBillIdsIn(allBillIds);
+        
         // Get all item subtypes from previous bills
-        Set<String> previousSubtypes = previousBills.stream()
-                .flatMap(bill -> billItemRepository.findByBill_BillId(bill.getBillId()).stream())
+        Set<String> previousSubtypes = allItems.stream()
+                .filter(item -> !item.getBill().getBillId().equals(currentBill.getBillId()))
                 .map(BillItem::getSubtype)
                 .collect(Collectors.toSet());
         
         // Check for new subtypes in current bill
-        List<BillItem> currentItems = billItemRepository.findByBill_BillId(currentBill.getBillId());
+        List<BillItem> currentItems = allItems.stream()
+                .filter(item -> item.getBill().getBillId().equals(currentBill.getBillId()))
+                .collect(Collectors.toList());
         
         for (BillItem item : currentItems) {
             if (!previousSubtypes.contains(item.getSubtype())) {
@@ -272,18 +283,24 @@ public class AnomalyServiceImpl implements AnomalyService {
         
         if (previousBills.isEmpty()) return anomalies;
         
+        // Batch query ile tüm bill item'ları tek seferde al
+        List<Long> allBillIds = new ArrayList<>();
+        allBillIds.add(currentBill.getBillId());
+        allBillIds.addAll(previousBills.stream().map(Bill::getBillId).collect(Collectors.toList()));
+        
+        List<BillItem> allItems = billItemRepository.findByBillIdsIn(allBillIds);
+        
         // Check if roaming was activated
-        List<BillItem> currentRoamingItems = billItemRepository.findByBill_BillId(currentBill.getBillId())
-                .stream()
+        List<BillItem> currentRoamingItems = allItems.stream()
+                .filter(item -> item.getBill().getBillId().equals(currentBill.getBillId()))
                 .filter(item -> item.getCategory() == ItemCategory.ROAMING)
                 .collect(Collectors.toList());
         
         if (!currentRoamingItems.isEmpty()) {
             // Check if there was roaming in previous months
-            boolean hadRoamingBefore = previousBills.stream()
-                    .anyMatch(bill -> billItemRepository.findByBill_BillId(bill.getBillId())
-                            .stream()
-                            .anyMatch(item -> item.getCategory() == ItemCategory.ROAMING));
+            boolean hadRoamingBefore = allItems.stream()
+                    .filter(item -> !item.getBill().getBillId().equals(currentBill.getBillId()))
+                    .anyMatch(item -> item.getCategory() == ItemCategory.ROAMING);
             
             if (!hadRoamingBefore) {
                 BigDecimal totalRoaming = currentRoamingItems.stream()
@@ -310,11 +327,21 @@ public class AnomalyServiceImpl implements AnomalyService {
         
         if (previousBills.isEmpty()) return anomalies;
         
+        // Batch query ile tüm bill item'ları tek seferde al
+        List<Long> allBillIds = new ArrayList<>();
+        allBillIds.add(currentBill.getBillId());
+        allBillIds.addAll(previousBills.stream().map(Bill::getBillId).collect(Collectors.toList()));
+        
+        List<BillItem> allItems = billItemRepository.findByBillIdsIn(allBillIds);
+        
         // Calculate average Premium SMS amount from previous months
-        List<BigDecimal> previousPremiumSMSAmounts = previousBills.stream()
-                .map(bill -> billItemRepository.findByBill_BillId(bill.getBillId())
-                        .stream()
-                        .filter(item -> item.getCategory() == ItemCategory.PREMIUM_SMS)
+        List<BigDecimal> previousPremiumSMSAmounts = allItems.stream()
+                .filter(item -> !item.getBill().getBillId().equals(currentBill.getBillId()))
+                .filter(item -> item.getCategory() == ItemCategory.PREMIUM_SMS)
+                .collect(Collectors.groupingBy(item -> item.getBill().getBillId()))
+                .values()
+                .stream()
+                .map(items -> items.stream()
                         .map(BillItem::getAmount)
                         .reduce(BigDecimal.ZERO, BigDecimal::add))
                 .collect(Collectors.toList());
@@ -324,8 +351,8 @@ public class AnomalyServiceImpl implements AnomalyService {
                 .divide(BigDecimal.valueOf(previousPremiumSMSAmounts.size()), 2, RoundingMode.HALF_UP);
         
         // Get current Premium SMS amount
-        BigDecimal currentPremiumSMS = billItemRepository.findByBill_BillId(currentBill.getBillId())
-                .stream()
+        BigDecimal currentPremiumSMS = allItems.stream()
+                .filter(item -> item.getBill().getBillId().equals(currentBill.getBillId()))
                 .filter(item -> item.getCategory() == ItemCategory.PREMIUM_SMS)
                 .map(BillItem::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -357,15 +384,22 @@ public class AnomalyServiceImpl implements AnomalyService {
         
         if (previousBills.isEmpty()) return anomalies;
         
+        // Batch query ile tüm bill item'ları tek seferde al
+        List<Long> allBillIds = new ArrayList<>();
+        allBillIds.add(currentBill.getBillId());
+        allBillIds.addAll(previousBills.stream().map(Bill::getBillId).collect(Collectors.toList()));
+        
+        List<BillItem> allItems = billItemRepository.findByBillIdsIn(allBillIds);
+        
         // Get current VAS items (excluding plan fee)
-        List<BillItem> currentVASItems = billItemRepository.findByBill_BillId(currentBill.getBillId())
-                .stream()
+        List<BillItem> currentVASItems = allItems.stream()
+                .filter(item -> item.getBill().getBillId().equals(currentBill.getBillId()))
                 .filter(item -> item.getCategory() == ItemCategory.VAS && !"plan_fee".equals(item.getSubtype()))
                 .collect(Collectors.toList());
         
         // Get previous VAS items
-        Set<String> previousVASSubtypes = previousBills.stream()
-                .flatMap(bill -> billItemRepository.findByBill_BillId(bill.getBillId()).stream())
+        Set<String> previousVASSubtypes = allItems.stream()
+                .filter(item -> !item.getBill().getBillId().equals(currentBill.getBillId()))
                 .filter(item -> item.getCategory() == ItemCategory.VAS && !"plan_fee".equals(item.getSubtype()))
                 .map(BillItem::getSubtype)
                 .collect(Collectors.toSet());

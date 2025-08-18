@@ -10,4 +10,6 @@ public interface SimulationService {
     SimulationResponseDTO getScenarios(Long userId);
     
     SimulationResponseDTO compareScenarios(SimulationRequestDTO request);
+    
+    SimulationResponseDTO getWhatIfAnalysis(Long userId, String period);
 }

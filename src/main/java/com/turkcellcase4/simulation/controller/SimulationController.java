@@ -35,4 +35,12 @@ public class SimulationController {
         log.info("POST /whatif/compare - Compare scenarios");
         return ResponseEntity.ok(simulationService.compareScenarios(request));
     }
+
+    @GetMapping("/{userId}/analysis")
+    public ResponseEntity<SimulationResponseDTO> getWhatIfAnalysis(
+            @PathVariable Long userId,
+            @RequestParam String period) {
+        log.info("GET /whatif/{}/analysis - Get what-if analysis for period: {}", userId, period);
+        return ResponseEntity.ok(simulationService.getWhatIfAnalysis(userId, period));
+    }
 }

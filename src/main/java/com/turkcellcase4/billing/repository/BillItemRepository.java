@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 public interface BillItemRepository extends JpaRepository<BillItem, Long> {
@@ -25,4 +26,18 @@ public interface BillItemRepository extends JpaRepository<BillItem, Long> {
 	
 	@Query("SELECT bi FROM BillItem bi WHERE bi.bill.user.userId = :userId AND bi.bill.periodStart >= :startDate ORDER BY bi.bill.periodStart DESC")
 	List<BillItem> findByUserIdAndPeriodOrderByDate(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
+	
+	// N+1 sorgu problemlerini çözmek için batch query'ler
+	@Query("SELECT bi FROM BillItem bi WHERE bi.bill.billId IN :billIds")
+	List<BillItem> findByBillIdsIn(@Param("billIds") List<Long> billIds);
+	
+	@Query("SELECT bi FROM BillItem bi WHERE bi.bill.billId IN :billIds AND bi.category = :category")
+	List<BillItem> findByBillIdsInAndCategory(@Param("billIds") List<Long> billIds, @Param("category") ItemCategory category);
+	
+	@Query("SELECT bi.bill.billId, bi FROM BillItem bi WHERE bi.bill.billId IN :billIds")
+	List<Object[]> findBillItemsGroupedByBillId(@Param("billIds") List<Long> billIds);
+	
+	// Kategori bazında toplam hesaplama için
+	@Query("SELECT bi.bill.billId, bi.category, SUM(bi.amount) FROM BillItem bi WHERE bi.bill.billId IN :billIds GROUP BY bi.bill.billId, bi.category")
+	List<Object[]> getCategoryTotalsByBillIds(@Param("billIds") List<Long> billIds);
 }

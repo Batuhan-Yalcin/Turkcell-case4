@@ -64,11 +64,16 @@ public class SimulationServiceImpl implements SimulationService {
             // Generate detailed breakdown
             String details = generateScenarioDetails(scenario, newTotal, savings);
             
+            // Generate recommendations
+            List<String> recommendations = generateRecommendations(scenario, savings, currentTotal);
+            
             return SimulationResponseDTO.builder()
                     .newTotal(newTotal)
                     .saving(savings)
                     .details(details)
                     .scenario(scenario)
+                    .recommendations(recommendations)
+                    .currentTotal(currentTotal)
                     .build();
         } catch (Exception e) {
             if (e instanceof ResourceNotFoundException) {
@@ -132,6 +137,59 @@ public class SimulationServiceImpl implements SimulationService {
         return SimulationResponseDTO.builder()
                 .comparisons(comparisons)
                 .build();
+    }
+
+    @Override
+    public SimulationResponseDTO getWhatIfAnalysis(Long userId, String period) {
+        log.info("Getting what-if analysis for user: {} and period: {}", userId, period);
+        
+        try {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı: " + userId));
+            
+            Bill currentBill = getCurrentBill(userId, period);
+            if (currentBill == null) {
+                throw new ResourceNotFoundException("Belirtilen dönem için fatura bulunamadı");
+            }
+            
+            BigDecimal currentTotal = currentBill.getTotalAmount();
+            
+            // Generate comprehensive what-if scenarios
+            List<SimulationScenarioDTO> whatIfScenarios = generateWhatIfScenarios(user, currentBill);
+            List<ScenarioComparisonDTO> whatIfComparisons = new ArrayList<>();
+            
+            for (SimulationScenarioDTO scenario : whatIfScenarios) {
+                BigDecimal newTotal = calculateNewTotal(currentBill, scenario, userId, period);
+                BigDecimal savings = currentTotal.subtract(newTotal);
+                
+                whatIfComparisons.add(ScenarioComparisonDTO.builder()
+                        .scenario(scenario)
+                        .newTotal(newTotal)
+                        .savings(savings)
+                        .build());
+            }
+            
+            // Sort by savings (descending) and take top 5
+            whatIfComparisons.sort((a, b) -> b.getSavings().compareTo(a.getSavings()));
+            List<ScenarioComparisonDTO> topScenarios = whatIfComparisons.stream()
+                    .limit(5)
+                    .collect(Collectors.toList());
+            
+            // Generate summary insights
+            String summary = generateWhatIfSummary(currentTotal, topScenarios);
+            
+            return SimulationResponseDTO.builder()
+                    .comparisons(topScenarios)
+                    .summary(summary)
+                    .currentTotal(currentTotal)
+                    .build();
+                    
+        } catch (Exception e) {
+            if (e instanceof ResourceNotFoundException) {
+                throw e;
+            }
+            throw new BusinessLogicException("What-if analizi hatası: " + e.getMessage());
+        }
     }
 
     private BigDecimal calculateNewTotal(Bill currentBill, SimulationScenarioDTO scenario, Long userId, String period) {
@@ -342,36 +400,194 @@ public class SimulationServiceImpl implements SimulationService {
         return scenarios;
     }
 
+    private List<SimulationScenarioDTO> generateWhatIfScenarios(User user, Bill currentBill) {
+        List<SimulationScenarioDTO> scenarios = new ArrayList<>();
+        
+        // Get available plans and add-ons
+        List<Plan> availablePlans = planRepository.findAll();
+        List<AddOnPack> availableAddOns = addOnPackRepository.findAll();
+        
+        // Scenario 1: Keep current plan (baseline)
+        scenarios.add(SimulationScenarioDTO.builder()
+                .description("Mevcut planı koru")
+                .build());
+        
+        // Scenario 2: Switch to cheapest plan
+        if (availablePlans.size() > 1) {
+            Plan cheapestPlan = availablePlans.stream()
+                    .min(Comparator.comparing(Plan::getMonthlyPrice))
+                    .orElse(availablePlans.get(0));
+            
+            scenarios.add(SimulationScenarioDTO.builder()
+                    .planId(cheapestPlan.getPlanId())
+                    .description("En ucuz plana geç: " + cheapestPlan.getPlanName())
+                    .build());
+        }
+        
+        // Scenario 3: Switch to premium plan with more quota
+        if (availablePlans.size() > 2) {
+            Plan premiumPlan = availablePlans.stream()
+                    .max(Comparator.comparing(Plan::getQuotaGb))
+                    .orElse(availablePlans.get(0));
+            
+            scenarios.add(SimulationScenarioDTO.builder()
+                    .planId(premiumPlan.getPlanId())
+                    .description("Premium plana yükselt: " + premiumPlan.getPlanName())
+                    .build());
+        }
+        
+        // Scenario 4: Add data add-on
+        if (!availableAddOns.isEmpty()) {
+            AddOnPack dataAddon = availableAddOns.stream()
+                    .filter(addon -> "data".equals(addon.getType()))
+                    .findFirst()
+                    .orElse(availableAddOns.get(0));
+            
+            scenarios.add(SimulationScenarioDTO.builder()
+                    .addons(Arrays.asList(dataAddon.getAddonId()))
+                    .description("Data paketi ekle: " + dataAddon.getName())
+                    .build());
+        }
+        
+        // Scenario 5: Add voice add-on
+        if (availableAddOns.size() > 1) {
+            AddOnPack voiceAddon = availableAddOns.stream()
+                    .filter(addon -> "voice".equals(addon.getType()))
+                    .findFirst()
+                    .orElse(availableAddOns.get(0));
+            
+            scenarios.add(SimulationScenarioDTO.builder()
+                    .addons(Arrays.asList(voiceAddon.getAddonId()))
+                    .description("Ses paketi ekle: " + voiceAddon.getName())
+                    .build());
+        }
+        
+        // Scenario 6: Disable VAS services
+        scenarios.add(SimulationScenarioDTO.builder()
+                .disableVas(true)
+                .description("VAS servislerini devre dışı bırak")
+                .build());
+        
+        // Scenario 7: Block Premium SMS
+        scenarios.add(SimulationScenarioDTO.builder()
+                .blockPremiumSms(true)
+                .description("Premium SMS'i engelle")
+                .build());
+        
+        // Scenario 8: Disable VAS and Premium SMS
+        scenarios.add(SimulationScenarioDTO.builder()
+                .disableVas(true)
+                .blockPremiumSms(true)
+                .description("VAS ve Premium SMS'i devre dışı bırak")
+                .build());
+        
+        // Scenario 9: Combine plan change with add-on
+        if (availablePlans.size() > 1 && !availableAddOns.isEmpty()) {
+            Plan midPlan = availablePlans.get(1); // Second plan
+            AddOnPack dataAddon = availableAddOns.get(0);
+            
+            scenarios.add(SimulationScenarioDTO.builder()
+                    .planId(midPlan.getPlanId())
+                    .addons(Arrays.asList(dataAddon.getAddonId()))
+                    .description("Orta plana geç + data paketi ekle")
+                    .build());
+        }
+        
+        // Scenario 10: Optimize for current usage
+        scenarios.add(SimulationScenarioDTO.builder()
+                .description("Mevcut kullanıma göre optimize et")
+                .build());
+        
+        return scenarios;
+    }
+
     private String generateScenarioDetails(SimulationScenarioDTO scenario, BigDecimal newTotal, BigDecimal savings) {
         StringBuilder details = new StringBuilder();
         
         if (scenario.getPlanId() != null) {
-            details.append("Plan changed to ID: ").append(scenario.getPlanId()).append(". ");
+            details.append("Plan değişikliği: ID ").append(scenario.getPlanId()).append(". ");
         }
         
         if (scenario.getAddons() != null && !scenario.getAddons().isEmpty()) {
-            details.append("Add-ons added: ").append(scenario.getAddons().size()).append(". ");
+            details.append("Ek paketler eklendi: ").append(scenario.getAddons().size()).append(" adet. ");
         }
         
         if (Boolean.TRUE.equals(scenario.getDisableVas())) {
-            details.append("VAS services disabled. ");
+            details.append("VAS servisleri devre dışı. ");
         }
         
         if (Boolean.TRUE.equals(scenario.getBlockPremiumSms())) {
-            details.append("Premium SMS blocked. ");
+            details.append("Premium SMS engellendi. ");
         }
         
-        details.append("New total: ").append(newTotal).append(" TL. ");
+        details.append("Yeni toplam: ").append(newTotal).append(" TL. ");
         
         if (savings.compareTo(BigDecimal.ZERO) > 0) {
-            details.append("Potential savings: ").append(savings).append(" TL.");
+            details.append("Potansiyel tasarruf: ").append(savings).append(" TL.");
         } else if (savings.compareTo(BigDecimal.ZERO) < 0) {
-            details.append("Additional cost: ").append(savings.abs()).append(" TL.");
+            details.append("Ek maliyet: ").append(savings.abs()).append(" TL.");
         } else {
-            details.append("No cost change.");
+            details.append("Maliyet değişikliği yok.");
         }
         
         return details.toString();
+    }
+
+    private List<String> generateRecommendations(SimulationScenarioDTO scenario, BigDecimal savings, BigDecimal currentTotal) {
+        List<String> recommendations = new ArrayList<>();
+        
+        if (savings.compareTo(BigDecimal.ZERO) > 0) {
+            recommendations.add("Bu senaryo ile " + savings + " TL tasarruf edebilirsiniz.");
+            
+            if (savings.compareTo(currentTotal.multiply(new BigDecimal("0.2"))) > 0) {
+                recommendations.add("Önemli tasarruf fırsatı! Toplam faturanızın %20'sinden fazla tasarruf.");
+            }
+        } else if (savings.compareTo(BigDecimal.ZERO) < 0) {
+            recommendations.add("Bu senaryo ek maliyet getiriyor. Dikkatli değerlendirin.");
+        }
+        
+        if (Boolean.TRUE.equals(scenario.getDisableVas())) {
+            recommendations.add("VAS servislerini kapatarak gereksiz ücretlerden kaçınabilirsiniz.");
+        }
+        
+        if (Boolean.TRUE.equals(scenario.getBlockPremiumSms())) {
+            recommendations.add("Premium SMS engelleme ile beklenmedik ücretleri önleyebilirsiniz.");
+        }
+        
+        if (scenario.getAddons() != null && !scenario.getAddons().isEmpty()) {
+            recommendations.add("Ek paketler ile aşım ücretlerini azaltabilirsiniz.");
+        }
+        
+        return recommendations;
+    }
+
+    private String generateWhatIfSummary(BigDecimal currentTotal, List<ScenarioComparisonDTO> topScenarios) {
+        if (topScenarios.isEmpty()) {
+            return "Senaryo analizi yapılamadı.";
+        }
+        
+        StringBuilder summary = new StringBuilder();
+        summary.append("Mevcut fatura tutarınız: ").append(currentTotal).append(" TL. ");
+        
+        // Best scenario
+        ScenarioComparisonDTO bestScenario = topScenarios.get(0);
+        if (bestScenario.getSavings().compareTo(BigDecimal.ZERO) > 0) {
+            summary.append("En iyi senaryo ile ").append(bestScenario.getSavings()).append(" TL tasarruf edebilirsiniz. ");
+            summary.append(bestScenario.getScenario().getDescription()).append(" ");
+        }
+        
+        // Average savings
+        BigDecimal avgSavings = topScenarios.stream()
+                .map(ScenarioComparisonDTO::getSavings)
+                .filter(savings -> savings.compareTo(BigDecimal.ZERO) > 0)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(topScenarios.size()), 2, RoundingMode.HALF_UP);
+        
+        if (avgSavings.compareTo(BigDecimal.ZERO) > 0) {
+            summary.append("Ortalama tasarruf potansiyeli: ").append(avgSavings).append(" TL.");
+        }
+        
+        return summary.toString();
     }
 
     private Bill getCurrentBill(Long userId, String period) {

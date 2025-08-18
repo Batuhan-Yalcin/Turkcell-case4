@@ -39,4 +39,10 @@ public class CheckoutController {
         log.info("POST /checkout/validate - Validate scenario");
         return ResponseEntity.ok(checkoutService.validateScenario(request));
     }
+
+    @PostMapping("/preview")
+    public ResponseEntity<CheckoutResponseDTO> preview(@Valid @RequestBody CheckoutRequestDTO request) {
+        log.info("POST /checkout/preview - Preview changes");
+        return ResponseEntity.ok(checkoutService.previewChanges(request));
+    }
 }

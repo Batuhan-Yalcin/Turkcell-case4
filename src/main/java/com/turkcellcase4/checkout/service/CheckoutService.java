@@ -10,4 +10,6 @@ public interface CheckoutService {
     CheckoutResponseDTO getOrderStatus(String orderId);
     
     CheckoutResponseDTO validateScenario(CheckoutRequestDTO request);
+    
+    CheckoutResponseDTO previewChanges(CheckoutRequestDTO request);
 }
