@@ -117,76 +117,82 @@ const DashboardPage: React.FC = () => {
       const catalogResponse = await apiService.getFullCatalog();
       setCatalog(catalogResponse.data);
       
-      // Load recent bills (demo user ID: 1001)
+      // Load recent bills - use current user ID or fallback to 1
+      const userId = user?.userId || 1;
       try {
-        const billsResponse = await apiService.getRecentBillsByUserId(1001);
+        const billsResponse = await apiService.getRecentBillsByUserId(userId);
         setRecentBills(billsResponse.data);
+        console.log('Loaded bills:', billsResponse.data);
       } catch (err) {
         console.log('Bills API error:', err);
-        // Fallback to mock data
-        setRecentBills([]);
+        // Try to get bills by period
+        try {
+          const billsByPeriod = await apiService.getBillsByUserIdAndDateRange(
+            userId, 
+            '2025-01-01', 
+            '2025-12-31'
+          );
+          setRecentBills(billsByPeriod.data);
+          console.log('Loaded bills by period:', billsByPeriod.data);
+        } catch (periodErr) {
+          console.log('Bills by period API error:', periodErr);
+          setRecentBills([]);
+        }
       }
       
       // Load anomalies data
       try {
-        const anomaliesResponse = await apiService.getAnomalies(1001, selectedPeriod);
-        setAnomalies(anomaliesResponse.data.anomalies || []);
+        const anomaliesResponse = await apiService.getAnomalies(userId, selectedPeriod);
+        console.log('Anomalies response:', anomaliesResponse.data);
+        if (anomaliesResponse.data && anomaliesResponse.data.anomalies) {
+          setAnomalies(anomaliesResponse.data.anomalies);
+        } else if (anomaliesResponse.data && Array.isArray(anomaliesResponse.data)) {
+          setAnomalies(anomaliesResponse.data);
+        } else {
+          setAnomalies([]);
+        }
       } catch (err) {
         console.log('Anomalies API error:', err);
-        // Fallback to mock data
-        const mockAnomalies = [
-          {
-            anomalyId: 1,
-            userId: 1001,
-            billId: 1,
-            type: 'DATA_USAGE',
-            severity: 'MEDIUM',
-            description: 'Data kullanımında anormal artış tespit edildi',
-            detectedAt: new Date().toISOString(),
-            status: 'ACTIVE',
-            zScore: 2.5,
-            percentageDifference: 15.5,
-            recommendations: ['Data paketini kontrol edin', 'Kullanım limitlerini gözden geçirin']
-          },
-          {
-            anomalyId: 2,
-            userId: 1001,
-            billId: 1,
-            type: 'VOICE_USAGE',
-            severity: 'LOW',
-            description: 'Ses kullanımında hafif anomali',
-            detectedAt: new Date().toISOString(),
-            status: 'ACTIVE',
-            zScore: 1.8,
-            percentageDifference: 8.2,
-            recommendations: ['Arama geçmişini kontrol edin']
+        // Try to get anomaly history
+        try {
+          const anomalyHistory = await apiService.getAnomalyHistory(userId);
+          if (anomalyHistory.data && anomalyHistory.data.anomalies) {
+            setAnomalies(anomalyHistory.data.anomalies);
+          } else if (anomalyHistory.data && Array.isArray(anomalyHistory.data)) {
+            setAnomalies(anomalyHistory.data);
+          } else {
+            setAnomalies([]);
           }
-        ];
-        setAnomalies(mockAnomalies);
+        } catch (historyErr) {
+          console.log('Anomaly history API error:', historyErr);
+          setAnomalies([]);
+        }
       }
       
       // Load usage summary
       try {
-        const usageResponse = await apiService.getUsageSummary(1001, selectedPeriod);
+        const usageResponse = await apiService.getUsageSummary(userId, selectedPeriod);
         setUsageSummary(usageResponse.data);
+        console.log('Usage summary:', usageResponse.data);
       } catch (err) {
         console.log('Usage API error:', err);
         // Fallback to mock data
         const mockUsageSummary = {
-          userId: 1001,
+          userId: userId,
           period: selectedPeriod,
           dataUsage: 4.2,
           voiceUsage: 45,
           smsUsage: 12,
-          roamingUsage: 0,
-          totalCost: 45.0,
+          roamingUsage: 0.5,
+          totalCost: 89.99,
           dailyBreakdown: []
         };
         setUsageSummary(mockUsageSummary);
       }
       
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Veri yüklenirken bir hata oluştu');
+      console.error('Dashboard data loading error:', err);
+      setError(err.response?.data?.message || 'Dashboard verileri yüklenirken bir hata oluştu');
     } finally {
       setIsLoading(false);
     }
@@ -345,12 +351,33 @@ const DashboardPage: React.FC = () => {
         )}
 
         {/* Quick Stats */}
-        <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: 3, 
-          mb: 4 
-        }}>
+        {isLoading ? (
+          <Box sx={{ 
+            display: 'grid', 
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+            gap: 3, 
+            mb: 4 
+          }}>
+            {[1, 2, 3, 4].map((index) => (
+              <Box key={index}>
+                <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
+                  <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                    <CircularProgress size={40} />
+                    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                      Yükleniyor...
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Box>
+            ))}
+          </Box>
+        ) : (
+          <Box sx={{ 
+            display: 'grid', 
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+            gap: 3, 
+            mb: 4 
+          }}>
           <Box>
             <Grow in={true} timeout={1000}>
               <Card sx={{ 
@@ -373,6 +400,9 @@ const DashboardPage: React.FC = () => {
                   </Typography>
                   <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
                     Toplam Fatura
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                    ₺{recentBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0).toFixed(2)}
                   </Typography>
                 </CardContent>
               </Card>
@@ -401,6 +431,9 @@ const DashboardPage: React.FC = () => {
                   </Typography>
                   <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
                     Anomali Tespit
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {anomalies.filter(a => a.severity === 'HIGH').length} Kritik
                   </Typography>
                 </CardContent>
               </Card>
@@ -453,16 +486,20 @@ const DashboardPage: React.FC = () => {
                     <Analytics sx={{ color: 'white' }} />
                   </Avatar>
                   <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
-                    {catalog?.addOns?.length || 0}
+                    {usageSummary?.dataUsage?.toFixed(1) || '0'} GB
                   </Typography>
                   <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                    Ek Paket
+                    Data Kullanımı
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {usageSummary?.voiceUsage || 0} dk Ses
                   </Typography>
                 </CardContent>
               </Card>
             </Grow>
           </Box>
         </Box>
+        )}
 
         {/* Main Content Tabs */}
         <Paper sx={{ 
