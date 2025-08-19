@@ -19,7 +19,9 @@ public class BillResponseDTO {
     private LocalDate periodStart;
     private LocalDate periodEnd;
     private LocalDate issueDate;
+    private LocalDate dueDate;
     private BigDecimal totalAmount;
     private String currency;
+    private String status;
     private List<BillItemDTO> items;
 }
