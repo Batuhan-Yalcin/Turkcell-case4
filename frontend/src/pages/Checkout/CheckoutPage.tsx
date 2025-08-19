@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -17,11 +17,14 @@ import {
   StepLabel,
   Alert,
   CircularProgress,
-  Divider
+  Divider,
+  Chip,
+  Grid
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import apiService from '../../services/api';
 import { CheckoutRequest, CheckoutAction } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CheckoutItem {
   id: number;
@@ -32,16 +35,59 @@ interface CheckoutItem {
   type: string;
 }
 
-const steps = ['Sepet', 'Ödeme', 'Onay'];
+interface CurrentPlan {
+  id: number;
+  name: string;
+  monthlyFee: number;
+  dataLimit: number;
+  voiceLimit: number;
+  smsLimit: number;
+}
+
+interface CurrentVAS {
+  id: number;
+  name: string;
+  monthlyFee: number;
+  category: string;
+}
+
+const steps = ['Mevcut Hizmetler', 'Değişiklikler', 'Onay'];
 
 const CheckoutPage: React.FC = () => {
+  const { user } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
+  const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
+  const [newPlanId, setNewPlanId] = useState<number | ''>('');
+  const [selectedAddOns, setSelectedAddOns] = useState<number[]>([]);
+  const [selectedVAS, setSelectedVAS] = useState<number[]>([]);
 
-  const { data: cartItems, isLoading } = useQuery({
-    queryKey: ['checkout-cart'],
-    queryFn: () => apiService.getCartItems().then((res: any) => res.data)
+  // Get current user's plan and services
+  const { data: currentPlan, isLoading: planLoading } = useQuery({
+    queryKey: ['current-plan', user?.userId],
+    queryFn: () => apiService.getCurrentPlan(user?.userId || 1).then((res: any) => res.data),
+    enabled: !!user?.userId
+  });
+
+  const { data: currentVAS, isLoading: vasLoading } = useQuery({
+    queryKey: ['current-vas', user?.userId],
+    queryFn: () => apiService.getCurrentVAS(user?.userId || 1).then((res: any) => res.data),
+    enabled: !!user?.userId
+  });
+
+  // Get available plans and add-ons for changes
+  const { data: availablePlans } = useQuery({
+    queryKey: ['available-plans'],
+    queryFn: () => apiService.getPlans().then((res: any) => res.data)
+  });
+
+  const { data: availableAddOns } = useQuery({
+    queryKey: ['available-addons'],
+    queryFn: () => apiService.getAddOns().then((res: any) => res.data)
+  });
+
+  const { data: availableVAS } = useQuery({
+    queryKey: ['available-vas'],
+    queryFn: () => apiService.getVAS().then((res: any) => res.data)
   });
 
   const checkoutMutation = useMutation({
@@ -57,18 +103,39 @@ const CheckoutPage: React.FC = () => {
     if (activeStep === 0) {
       setActiveStep(1);
     } else if (activeStep === 1) {
-      const actions: CheckoutAction[] = [
-        {
+      const actions: CheckoutAction[] = [];
+      
+      if (newPlanId) {
+        actions.push({
           type: 'CHANGE_PLAN',
-          payload: { planId: 1 }
-        }
-      ];
+          payload: { planId: newPlanId }
+        });
+      }
+      
+      if (selectedAddOns.length > 0) {
+        actions.push({
+          type: 'ADD_ADDON',
+          payload: { addonIds: selectedAddOns }
+        });
+      }
+      
+      if (selectedVAS.length > 0) {
+        actions.push({
+          type: 'CANCEL_VAS',
+          payload: { vasIds: selectedVAS }
+        });
+      }
       
       const request: CheckoutRequest = {
-        userId: 1, // TODO: Get from auth context
+        userId: user?.userId || 1,
         actions
       };
-      checkoutMutation.mutate(request);
+      
+      if (actions.length > 0) {
+        checkoutMutation.mutate(request);
+      } else {
+        setActiveStep(2);
+      }
     }
   };
 
@@ -76,7 +143,7 @@ const CheckoutPage: React.FC = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
-  const totalAmount = cartItems?.reduce((sum: number, item: CheckoutItem) => sum + (item.price * item.quantity), 0) || 0;
+  const isLoading = planLoading || vasLoading;
 
   if (isLoading) {
     return (
@@ -86,10 +153,13 @@ const CheckoutPage: React.FC = () => {
     );
   }
 
+  const currentMonthlyCost = (currentPlan?.monthlyFee || 0) + 
+    (currentVAS?.reduce((sum: number, vas: CurrentVAS) => sum + vas.monthlyFee, 0) || 0);
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Ödeme Sayfası
+        Sipariş Yönetimi
       </Typography>
 
       <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
@@ -103,126 +173,143 @@ const CheckoutPage: React.FC = () => {
       {activeStep === 0 && (
         <Box sx={{ 
           display: 'grid', 
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
           gap: 3 
         }}>
-          <Box sx={{ gridColumn: { xs: '1', md: '1 / 3' } }}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Sepet İçeriği
-                </Typography>
-                {cartItems?.map((item: CheckoutItem) => (
-                  <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    <Box>
-                      <Typography variant="subtitle1">{item.name}</Typography>
-                      <Typography variant="body2" color="text.secondary">{item.description}</Typography>
-                    </Box>
-                    <Box sx={{ textAlign: 'right' }}>
-                      <Typography variant="subtitle1">₺{item.price}</Typography>
-                      <Typography variant="body2" color="text.secondary">Adet: {item.quantity}</Typography>
-                    </Box>
+          {/* Mevcut Plan */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Mevcut Plan
+              </Typography>
+              {currentPlan ? (
+                <Box>
+                  <Typography variant="h5" color="primary" gutterBottom>
+                    {currentPlan.name}
+                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Chip label={`${currentPlan.dataLimit} GB`} color="primary" sx={{ mr: 1, mb: 1 }} />
+                    <Chip label={`${currentPlan.voiceLimit} dk`} color="secondary" sx={{ mr: 1, mb: 1 }} />
+                    <Chip label={`${currentPlan.smsLimit} SMS`} color="success" sx={{ mr: 1, mb: 1 }} />
                   </Box>
-                ))}
-              </CardContent>
-            </Card>
-          </Box>
+                  <Typography variant="h6" color="primary">
+                    ₺{currentPlan.monthlyFee}/ay
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography color="text.secondary">Plan bulunamadı</Typography>
+              )}
+            </CardContent>
+          </Card>
 
-          <Box>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Toplam
-                </Typography>
-                <Typography variant="h4" color="primary" gutterBottom>
-                  ₺{totalAmount}
-                </Typography>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleNext}
-                  sx={{ mt: 2 }}
-                >
-                  Devam Et
-                </Button>
-              </CardContent>
-            </Card>
-          </Box>
+          {/* Mevcut VAS Hizmetleri */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Mevcut VAS Hizmetleri
+              </Typography>
+              {currentVAS && currentVAS.length > 0 ? (
+                <Box>
+                  {currentVAS.map((vas: CurrentVAS) => (
+                    <Box key={vas.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle1">{vas.name}</Typography>
+                        <Typography variant="body2" color="text.secondary">{vas.category}</Typography>
+                      </Box>
+                      <Typography variant="subtitle1" color="primary">
+                        ₺{vas.monthlyFee}/ay
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              ) : (
+                <Typography color="text.secondary">VAS hizmeti bulunmuyor</Typography>
+              )}
+              
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" color="primary">
+                Toplam Aylık: ₺{currentMonthlyCost}
+              </Typography>
+            </CardContent>
+          </Card>
         </Box>
       )}
 
       {activeStep === 1 && (
         <Box sx={{ 
           display: 'grid', 
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
           gap: 3 
         }}>
-          <Box sx={{ gridColumn: { xs: '1', md: '1 / 3' } }}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Ödeme Bilgileri
-                </Typography>
-                
-                <Box sx={{ display: 'grid', gap: 2 }}>
-                  <FormControl fullWidth>
-                    <InputLabel>Ödeme Yöntemi</InputLabel>
-                    <Select
-                      value={paymentMethod}
-                      label="Ödeme Yöntemi"
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                    >
-                      <MenuItem value="credit_card">Kredi Kartı</MenuItem>
-                      <MenuItem value="bank_transfer">Banka Transferi</MenuItem>
-                      <MenuItem value="mobile_payment">Mobil Ödeme</MenuItem>
-                    </Select>
-                  </FormControl>
-                  
-                  <TextField
-                    fullWidth
-                    label="Fatura Adresi"
-                    multiline
-                    rows={3}
-                    value={billingAddress}
-                    onChange={(e) => setBillingAddress(e.target.value)}
-                  />
-                </Box>
-              </CardContent>
-            </Card>
-          </Box>
+          {/* Plan Değişikliği */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Plan Değişikliği
+              </Typography>
+              
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Yeni Plan Seçin</InputLabel>
+                <Select
+                  value={newPlanId}
+                  label="Yeni Plan Seçin"
+                  onChange={(e) => setNewPlanId(e.target.value as number)}
+                >
+                  <MenuItem value="">Mevcut planı koru</MenuItem>
+                  {availablePlans?.map((plan: any) => (
+                    <MenuItem key={plan.id} value={plan.id}>
+                      {plan.name} - ₺{plan.monthlyFee}/ay
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          <Box>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Özet
-                </Typography>
-                <Typography variant="body1" gutterBottom>
-                  Toplam Tutar: ₺{totalAmount}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Ödeme Yöntemi: {paymentMethod || 'Seçilmedi'}
-                </Typography>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleNext}
-                  disabled={!paymentMethod || !billingAddress}
-                  sx={{ mt: 2 }}
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Ek Paketler</InputLabel>
+                <Select
+                  multiple
+                  value={selectedAddOns}
+                  label="Ek Paketler"
+                  onChange={(e) => setSelectedAddOns(e.target.value as number[])}
                 >
-                  Ödemeyi Tamamla
-                </Button>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  onClick={handleBack}
-                  sx={{ mt: 1 }}
+                  {availableAddOns?.map((addon: any) => (
+                    <MenuItem key={addon.id} value={addon.id}>
+                      {addon.name} - ₺{addon.monthlyFee}/ay
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </CardContent>
+          </Card>
+
+          {/* VAS Değişiklikleri */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                VAS Hizmet Değişiklikleri
+              </Typography>
+              
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>İptal Edilecek VAS</InputLabel>
+                <Select
+                  multiple
+                  value={selectedVAS}
+                  label="İptal Edilecek VAS"
+                  onChange={(e) => setSelectedVAS(e.target.value as number[])}
                 >
-                  Geri
-                </Button>
-              </CardContent>
-            </Card>
-          </Box>
+                  {currentVAS?.map((vas: CurrentVAS) => (
+                    <MenuItem key={vas.id} value={vas.id}>
+                      {vas.name} - ₺{vas.monthlyFee}/ay
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Seçilen değişiklikler bir sonraki fatura döneminde geçerli olacaktır.
+              </Typography>
+            </CardContent>
+          </Card>
         </Box>
       )}
 
@@ -231,17 +318,20 @@ const CheckoutPage: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h4" color="success.main" gutterBottom>
-                Ödeme Başarılı!
+                İşlem Tamamlandı!
               </Typography>
               <Typography variant="body1" paragraph>
-                Siparişiniz başarıyla işlendi. Sipariş numaranız: {(checkoutMutation.data as any)?.orderId}
+                {checkoutMutation.data ? 
+                  `Siparişiniz başarıyla işlendi. Sipariş numaranız: ${(checkoutMutation.data as any)?.orderId}` :
+                  'Değişiklik talebiniz alındı. Bir sonraki fatura döneminde geçerli olacaktır.'
+                }
               </Typography>
               <Button
                 variant="contained"
                 onClick={() => setActiveStep(0)}
                 sx={{ mr: 2 }}
               >
-                Yeni Sipariş
+                Yeni Değişiklik
               </Button>
               <Button
                 variant="outlined"
@@ -254,10 +344,27 @@ const CheckoutPage: React.FC = () => {
         </Box>
       )}
 
+      {/* Navigation Buttons */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+        <Button
+          disabled={activeStep === 0}
+          onClick={handleBack}
+        >
+          Geri
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleNext}
+          disabled={checkoutMutation.isPending}
+        >
+          {activeStep === steps.length - 1 ? 'Tamamla' : 'Devam Et'}
+        </Button>
+      </Box>
+
       {checkoutMutation.error && (
         <Box sx={{ mt: 3 }}>
           <Alert severity="error">
-            Ödeme işlemi sırasında hata oluştu: {(checkoutMutation.error as any).message}
+            İşlem sırasında hata oluştu: {(checkoutMutation.error as any).message}
           </Alert>
         </Box>
       )}

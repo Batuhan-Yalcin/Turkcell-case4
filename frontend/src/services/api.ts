@@ -216,6 +216,14 @@ class ApiService {
     return this.api.post('/checkout', request);
   }
 
+  async getCurrentPlan(userId: number): Promise<AxiosResponse<any>> {
+    return this.api.get(`/users/${userId}/current-plan`);
+  }
+
+  async getCurrentVAS(userId: number): Promise<AxiosResponse<any>> {
+    return this.api.get(`/users/${userId}/current-vas`);
+  }
+
   // Explain Services
   async explainBill(request: ExplainRequest): Promise<AxiosResponse<ExplainResponse>> {
     return this.api.post('/explain', request);
