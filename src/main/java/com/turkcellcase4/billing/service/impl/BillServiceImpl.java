@@ -3,6 +3,7 @@ package com.turkcellcase4.billing.service.impl;
 import com.turkcellcase4.billing.dto.BillResponseDTO;
 import com.turkcellcase4.billing.dto.BillItemDTO;
 import com.turkcellcase4.billing.dto.BillSummaryDTO;
+import com.turkcellcase4.billing.dto.CreateBillRequestDTO;
 import com.turkcellcase4.billing.mapper.BillMapper;
 import com.turkcellcase4.billing.model.Bill;
 import com.turkcellcase4.billing.model.BillItem;
@@ -12,6 +13,8 @@ import com.turkcellcase4.billing.service.BillService;
 import com.turkcellcase4.common.enums.ItemCategory;
 import com.turkcellcase4.common.exception.ResourceNotFoundException;
 import com.turkcellcase4.common.exception.BusinessLogicException;
+import com.turkcellcase4.user.repository.UserRepository;
+import com.turkcellcase4.user.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +33,7 @@ public class BillServiceImpl implements BillService {
 	private final BillRepository billRepository;
 	private final BillItemRepository billItemRepository;
 	private final BillMapper billMapper;
+	private final UserRepository userRepository;
 
 	@Override
 	public BillResponseDTO getBillById(Long billId) {
@@ -61,17 +66,17 @@ public class BillServiceImpl implements BillService {
 		}
 	}
 
-	@Override
-	public List<BillResponseDTO> getRecentBillsByUserId(Long userId) {
-		log.info("Getting recent bills for user: {}", userId);
-		try {
-			LocalDate startDate = LocalDate.now().minusMonths(6);
-			List<Bill> bills = billRepository.findRecentBillsByUserId(userId, startDate);
-			return billMapper.toBillResponseDTOList(bills);
-		} catch (Exception e) {
-			throw new BusinessLogicException("Son faturalar getirme hatası: " + e.getMessage());
-		}
-	}
+	  @Override
+  public List<BillResponseDTO> getRecentBillsByUserId(Long userId) {
+    log.info("Getting recent bills for user: {}", userId);
+    try {
+      LocalDate startDate = LocalDate.now().minusYears(2); // Son 2 yıla genişlet
+      List<Bill> bills = billRepository.findRecentBillsByUserId(userId, startDate);
+      return billMapper.toBillResponseDTOList(bills);
+    } catch (Exception e) {
+      throw new BusinessLogicException("Son faturalar getirme hatası: " + e.getMessage());
+    }
+  }
 
 	@Override
 	public List<String> getAvailablePeriods(Long userId) {
@@ -151,6 +156,54 @@ public class BillServiceImpl implements BillService {
 			return billMapper.toBillResponseDTOList(bills);
 		} catch (Exception e) {
 			throw new BusinessLogicException("Tarih aralığında faturalar getirme hatası: " + e.getMessage());
+		}
+	}
+
+	@Override
+	public BillResponseDTO createBill(CreateBillRequestDTO request) {
+		log.info("Creating bill for user: {} and period: {} to {}", request.getUserId(), request.getPeriodStart(), request.getPeriodEnd());
+		
+		try {
+			// Kullanıcı entity'sini al
+			User user = userRepository.findById(request.getUserId())
+					.orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı: " + request.getUserId()));
+			
+			// Yeni fatura oluştur
+			Bill bill = new Bill();
+			bill.setPeriodStart(request.getPeriodStart());
+			bill.setPeriodEnd(request.getPeriodEnd());
+			bill.setIssueDate(request.getIssueDate());
+			bill.setTotalAmount(request.getTotalAmount());
+			bill.setCurrency(request.getCurrency());
+			
+			// Kullanıcıyı set et
+			bill.setUser(user);
+			
+			// Faturayı kaydet
+			Bill savedBill = billRepository.save(bill);
+			
+			// Fatura kalemlerini oluştur ve kaydet
+			List<BillItem> billItems = request.getBillItems().stream()
+					.map(itemRequest -> {
+						BillItem item = new BillItem();
+						item.setBill(savedBill);
+						item.setCategory(ItemCategory.valueOf(itemRequest.getCategory().toUpperCase()));
+						item.setSubtype(itemRequest.getSubtype());
+						item.setDescription(itemRequest.getDescription());
+						item.setAmount(itemRequest.getAmount());
+						item.setUnitPrice(itemRequest.getUnitPrice());
+						item.setQuantity(itemRequest.getQuantity());
+						item.setTaxRate(itemRequest.getTaxRate() != null ? itemRequest.getTaxRate() : BigDecimal.ZERO);
+						return item;
+					})
+					.collect(Collectors.toList());
+			
+			billItemRepository.saveAll(billItems);
+			savedBill.setBillItems(billItems);
+			
+			return billMapper.toBillResponseDTO(savedBill);
+		} catch (Exception e) {
+			throw new BusinessLogicException("Fatura oluşturma hatası: " + e.getMessage());
 		}
 	}
 

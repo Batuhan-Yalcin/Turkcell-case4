@@ -13,7 +13,9 @@ import {
   PremiumSMS,
   User,
   Anomaly,
+  AnomalyResponse,
   UsageSummary,
+  CreateBillRequest,
   SimulationRequest,
   SimulationResponse,
   CheckoutRequest,
@@ -92,12 +94,16 @@ class ApiService {
   }
 
   // User Services
-  async getUsers(): Promise<AxiosResponse<User[]>> {
+  async getUsers(): Promise<AxiosResponse<{users: User[]}>> {
     return this.api.get('/users');
   }
 
   async getUserById(id: number): Promise<AxiosResponse<User>> {
     return this.api.get(`/users/${id}`);
+  }
+
+  async getUserByMsisdn(msisdn: string): Promise<AxiosResponse<User>> {
+    return this.api.get(`/users/msisdn/${msisdn}`);
   }
 
   // Bill Services
@@ -106,7 +112,7 @@ class ApiService {
   }
 
   async getBillByUserIdAndPeriod(userId: number, period: string): Promise<AxiosResponse<Bill>> {
-    return this.api.get(`/bills/${userId}?period=${period}`);
+    return this.api.get(`/bills/user/${userId}/period?period=${period}`);
   }
 
   async getRecentBillsByUserId(userId: number): Promise<AxiosResponse<Bill[]>> {
@@ -123,6 +129,10 @@ class ApiService {
 
   async getBillSummary(billId: number): Promise<AxiosResponse<BillSummary>> {
     return this.api.get(`/bills/${billId}/summary`);
+  }
+
+  async createBill(request: CreateBillRequest): Promise<AxiosResponse<Bill>> {
+    return this.api.post('/bills', request);
   }
 
   async getBillsByUserIdAndDateRange(
@@ -155,8 +165,20 @@ class ApiService {
   }
 
   // Anomaly Services
-  async getAnomalies(): Promise<AxiosResponse<Anomaly[]>> {
-    return this.api.get('/anomalies');
+  async getAnomalies(userId: number, period: string): Promise<AxiosResponse<AnomalyResponse>> {
+    return this.api.get(`/anomalies?userId=${userId}&period=${period}`);
+  }
+
+  async detectAnomalies(request: any): Promise<AxiosResponse<AnomalyResponse>> {
+    return this.api.post('/anomalies', request);
+  }
+
+  async getAnomalyHistory(userId: number): Promise<AxiosResponse<AnomalyResponse>> {
+    return this.api.get(`/anomalies/${userId}/history`);
+  }
+
+  async getAnomalySummary(userId: number): Promise<AxiosResponse<AnomalyResponse>> {
+    return this.api.get(`/anomalies/${userId}/summary`);
   }
 
   async createAnomaly(request: any): Promise<AxiosResponse<Anomaly>> {
@@ -181,6 +203,23 @@ class ApiService {
   // Explain Services
   async explainBill(request: ExplainRequest): Promise<AxiosResponse<ExplainResponse>> {
     return this.api.post('/explain', request);
+  }
+
+  // Bonus Services
+  async getAnomalyExplanation(anomalyId: number, userContext: string): Promise<AxiosResponse<string>> {
+    return this.api.post(`/bonus/llm/anomaly?anomalyId=${anomalyId}&userContext=${userContext}`);
+  }
+
+  async getCohortAnalysis(userId: number, period: string): Promise<AxiosResponse<any>> {
+    return this.api.get(`/bonus/cohort/${userId}?period=${period}`);
+  }
+
+  async getTaxAnalysis(billId: number): Promise<AxiosResponse<any>> {
+    return this.api.get(`/bonus/tax/${billId}`);
+  }
+
+  async getAutofixRecommendations(userId: number, period: string): Promise<AxiosResponse<any>> {
+    return this.api.get(`/bonus/autofix/${userId}/best?period=${period}`);
   }
 }
 

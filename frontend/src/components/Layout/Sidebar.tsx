@@ -65,6 +65,12 @@ const menuItems = [
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
+    text: 'AI Fatura Analizi',
+    icon: <Analytics />,
+    path: '/explain',
+    roles: ['ROLE_USER', 'ROLE_ADMIN'],
+  },
+  {
     text: 'Plan Karşılaştırma',
     icon: <CompareArrows />,
     path: '/simulation',

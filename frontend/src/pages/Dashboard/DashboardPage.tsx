@@ -27,6 +27,7 @@ import {
   Grow,
   LinearProgress,
   Badge,
+  Stack,
 } from '@mui/material';
 
 import {
@@ -50,6 +51,10 @@ import {
   Star,
   Business,
   Person,
+  Speed,
+  Security,
+  Support,
+  SmartToy,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -94,6 +99,13 @@ const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+    
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadDashboardData = async () => {
@@ -106,52 +118,72 @@ const DashboardPage: React.FC = () => {
       setCatalog(catalogResponse.data);
       
       // Load recent bills (demo user ID: 1001)
-      const billsResponse = await apiService.getRecentBillsByUserId(1001);
-      setRecentBills(billsResponse.data);
+      try {
+        const billsResponse = await apiService.getRecentBillsByUserId(1001);
+        setRecentBills(billsResponse.data);
+      } catch (err) {
+        console.log('Bills API error:', err);
+        // Fallback to mock data
+        setRecentBills([]);
+      }
       
-      // Mock anomalies data (backend endpoint çalışmıyor)
-      const mockAnomalies = [
-        {
-          anomalyId: 1,
-          userId: 1001,
-          billId: 1,
-          type: 'DATA_USAGE',
-          severity: 'MEDIUM',
-          description: 'Data kullanımında anormal artış tespit edildi',
-          detectedAt: new Date().toISOString(),
-          status: 'ACTIVE',
-          zScore: 2.5,
-          percentageDifference: 15.5,
-          recommendations: ['Data paketini kontrol edin', 'Kullanım limitlerini gözden geçirin']
-        },
-        {
-          anomalyId: 2,
-          userId: 1001,
-          billId: 1,
-          type: 'VOICE_USAGE',
-          severity: 'LOW',
-          description: 'Ses kullanımında hafif anomali',
-          detectedAt: new Date().toISOString(),
-          status: 'ACTIVE',
-          zScore: 1.8,
-          percentageDifference: 8.2,
-          recommendations: ['Arama geçmişini kontrol edin']
-        }
-      ];
-      setAnomalies(mockAnomalies);
+      // Load anomalies data
+      try {
+        const anomaliesResponse = await apiService.getAnomalies(1001, selectedPeriod);
+        setAnomalies(anomaliesResponse.data.anomalies || []);
+      } catch (err) {
+        console.log('Anomalies API error:', err);
+        // Fallback to mock data
+        const mockAnomalies = [
+          {
+            anomalyId: 1,
+            userId: 1001,
+            billId: 1,
+            type: 'DATA_USAGE',
+            severity: 'MEDIUM',
+            description: 'Data kullanımında anormal artış tespit edildi',
+            detectedAt: new Date().toISOString(),
+            status: 'ACTIVE',
+            zScore: 2.5,
+            percentageDifference: 15.5,
+            recommendations: ['Data paketini kontrol edin', 'Kullanım limitlerini gözden geçirin']
+          },
+          {
+            anomalyId: 2,
+            userId: 1001,
+            billId: 1,
+            type: 'VOICE_USAGE',
+            severity: 'LOW',
+            description: 'Ses kullanımında hafif anomali',
+            detectedAt: new Date().toISOString(),
+            status: 'ACTIVE',
+            zScore: 1.8,
+            percentageDifference: 8.2,
+            recommendations: ['Arama geçmişini kontrol edin']
+          }
+        ];
+        setAnomalies(mockAnomalies);
+      }
       
-      // Mock usage summary (backend endpoint çalışmıyor)
-      const mockUsageSummary = {
-        userId: 1001,
-        period: selectedPeriod,
-        dataUsage: 4.2,
-        voiceUsage: 45,
-        smsUsage: 12,
-        roamingUsage: 0,
-        totalCost: 45.0,
-        dailyBreakdown: []
-      };
-      setUsageSummary(mockUsageSummary);
+      // Load usage summary
+      try {
+        const usageResponse = await apiService.getUsageSummary(1001, selectedPeriod);
+        setUsageSummary(usageResponse.data);
+      } catch (err) {
+        console.log('Usage API error:', err);
+        // Fallback to mock data
+        const mockUsageSummary = {
+          userId: 1001,
+          period: selectedPeriod,
+          dataUsage: 4.2,
+          voiceUsage: 45,
+          smsUsage: 12,
+          roamingUsage: 0,
+          totalCost: 45.0,
+          dailyBreakdown: []
+        };
+        setUsageSummary(mockUsageSummary);
+      }
       
     } catch (err: any) {
       setError(err.response?.data?.message || 'Veri yüklenirken bir hata oluştu');
@@ -181,8 +213,21 @@ const DashboardPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress size={60} />
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        background: 'linear-gradient(135deg, #F8F9FA 0%, #E3F2FD 100%)'
+      }}>
+        <CircularProgress size={80} sx={{ color: '#00A3E0', mb: 3 }} />
+        <Typography variant="h6" sx={{ color: '#0077A3', fontWeight: 500 }}>
+          Dashboard yükleniyor...
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#0077A3', mt: 1, opacity: 0.7 }}>
+          Veriler hazırlanıyor
+        </Typography>
       </Box>
     );
   }
@@ -191,9 +236,21 @@ const DashboardPage: React.FC = () => {
     <Box sx={{ 
       minHeight: '100vh', 
       background: 'linear-gradient(135deg, #F8F9FA 0%, #E3F2FD 100%)',
-      py: 3 
+      py: 4,
+      position: 'relative',
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'radial-gradient(circle at 20% 80%, rgba(0, 163, 224, 0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 215, 0, 0.05) 0%, transparent 50%)',
+        pointerEvents: 'none',
+        zIndex: 0
+      }
     }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1 }}>
         {/* Header */}
         <Grow in={true} timeout={800}>
           <Paper
@@ -206,7 +263,8 @@ const DashboardPage: React.FC = () => {
               color: 'white',
               position: 'relative',
               overflow: 'hidden',
-              border: '2px solid #E60000',
+              boxShadow: '0 8px 32px rgba(0, 163, 224, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
             }}
           >
             <Box sx={{ position: 'relative', zIndex: 1 }}>
@@ -234,7 +292,7 @@ const DashboardPage: React.FC = () => {
                 
                 {/* Sağ üst bilgiler */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, color: '#E60000' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: '#FFD700' }}>
                     {user?.msisdn || 'N/A'}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.9 }}>
@@ -266,9 +324,24 @@ const DashboardPage: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-            {error}
-          </Alert>
+          <Grow in={true} timeout={500}>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3, 
+                borderRadius: 3,
+                boxShadow: '0 4px 20px rgba(244, 67, 54, 0.2)',
+                border: '1px solid rgba(244, 67, 54, 0.1)'
+              }}
+              action={
+                <Button color="inherit" size="small" onClick={() => setError('')}>
+                  Kapat
+                </Button>
+              }
+            >
+              {error}
+            </Alert>
+          </Grow>
         )}
 
         {/* Quick Stats */}
@@ -276,7 +349,7 @@ const DashboardPage: React.FC = () => {
           display: 'grid', 
           gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
           gap: 3, 
-          mb: 3 
+          mb: 4 
         }}>
           <Box>
             <Grow in={true} timeout={1000}>
@@ -286,10 +359,10 @@ const DashboardPage: React.FC = () => {
                 background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
                 color: 'white',
                 '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
+                  transform: 'translateY(-6px)',
+                  boxShadow: '0 12px 40px rgba(0, 163, 224, 0.4)',
                 },
-                transition: 'all 0.3s ease'
+                transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
               }}>
                 <CardContent sx={{ textAlign: 'center', p: 3 }}>
                   <Avatar sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', mx: 'auto', mb: 2, width: 56, height: 56 }}>
@@ -392,11 +465,17 @@ const DashboardPage: React.FC = () => {
         </Box>
 
         {/* Main Content Tabs */}
-        <Paper sx={{ borderRadius: 4, boxShadow: 3, overflow: 'hidden' }}>
+        <Paper sx={{ 
+          borderRadius: 4, 
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)', 
+          overflow: 'hidden',
+          border: '1px solid rgba(0, 163, 224, 0.1)'
+        }}>
           <Box sx={{ 
             borderBottom: 1, 
             borderColor: 'divider',
-            background: 'linear-gradient(90deg, #00A3E0 0%, #0077A3 100%)'
+            background: 'linear-gradient(90deg, #00A3E0 0%, #0077A3 100%)',
+            boxShadow: '0 2px 8px rgba(0, 163, 224, 0.2)'
           }}>
             <Tabs
               value={tabValue}
@@ -407,14 +486,18 @@ const DashboardPage: React.FC = () => {
                   minHeight: 64,
                   fontSize: '1rem',
                   fontWeight: 600,
-                  color: 'rgba(255, 255, 255, 0.7)',
+                  color: 'rgba(255, 255, 255, 0.9)',
                   '&.Mui-selected': {
                     color: 'white',
                     fontWeight: 700,
                   },
+                  '&:hover': {
+                    color: 'white',
+                    opacity: 1,
+                  },
                 },
                 '& .MuiTabs-indicator': {
-                  backgroundColor: '#E60000',
+                  backgroundColor: '#FFD700',
                   height: 4,
                 },
               }}
@@ -422,6 +505,7 @@ const DashboardPage: React.FC = () => {
               <Tab label="Faturalar" icon={<Receipt />} iconPosition="start" />
               <Tab label="Katalog" icon={<ShoppingCart />} iconPosition="start" />
               <Tab label="Anomaliler" icon={<Warning />} iconPosition="start" />
+              <Tab label="AI Analiz" icon={<SmartToy />} iconPosition="start" />
               <Tab label="Kullanım" icon={<Analytics />} iconPosition="start" />
               <Tab label="Simülasyon" icon={<CompareArrows />} iconPosition="start" />
             </Tabs>
@@ -430,7 +514,7 @@ const DashboardPage: React.FC = () => {
           {/* Faturalar Tab */}
           <TabPanel value={tabValue} index={0}>
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 2, color: 'primary.main' }}>
                 Son Faturalar
               </Typography>
               {recentBills.length > 0 ? (
@@ -468,35 +552,35 @@ const DashboardPage: React.FC = () => {
                             />
                           </TableCell>
                           <TableCell>
-                            <Button
-                              size="small"
-                              startIcon={<Visibility />}
-                              variant="outlined"
-                              sx={{ mr: 1 }}
-                            >
-                              Görüntüle
-                            </Button>
-                            <Button
-                              size="small"
-                              startIcon={<Download />}
-                              variant="outlined"
-                              sx={{ mr: 1 }}
-                            >
-                              İndir
-                            </Button>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              onClick={() => navigate('/bills')}
-                              sx={{
-                                background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
-                                '&:hover': {
-                                  background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
-                                },
-                              }}
-                            >
-                              Detaylar
-                            </Button>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                startIcon={<Visibility />}
+                                variant="outlined"
+                              >
+                                Görüntüle
+                              </Button>
+                              <Button
+                                size="small"
+                                startIcon={<Download />}
+                                variant="outlined"
+                              >
+                                İndir
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => navigate('/bills')}
+                                sx={{
+                                  background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+                                  '&:hover': {
+                                    background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
+                                  },
+                                }}
+                              >
+                                Detaylar
+                              </Button>
+                            </Stack>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -531,6 +615,9 @@ const DashboardPage: React.FC = () => {
 
           {/* Katalog Tab */}
           <TabPanel value={tabValue} index={1}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: 'primary.main' }}>
+              Katalog
+            </Typography>
             <Box sx={{ 
               display: 'grid', 
               gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
@@ -590,7 +677,7 @@ const DashboardPage: React.FC = () => {
 
           {/* Anomaliler Tab */}
           <TabPanel value={tabValue} index={2}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: 'primary.main' }}>
               Anomali Tespitleri
             </Typography>
             {anomalies.length > 0 ? (
@@ -654,13 +741,13 @@ const DashboardPage: React.FC = () => {
 
           {/* Kullanım Tab */}
           <TabPanel value={tabValue} index={3}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: 'primary.main' }}>
               Kullanım Özeti - {selectedPeriod}
             </Typography>
             {usageSummary ? (
               <Box sx={{ 
                 display: 'grid', 
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' },
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
                 gap: 3 
               }}>
                 <Box>
@@ -766,7 +853,7 @@ const DashboardPage: React.FC = () => {
 
           {/* Simülasyon Tab */}
           <TabPanel value={tabValue} index={4}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: 'primary.main' }}>
               What-If Simülasyonu
             </Typography>
             <Alert severity="info" sx={{ mb: 3 }}>
@@ -843,22 +930,23 @@ const DashboardPage: React.FC = () => {
         </Paper>
 
         {/* Refresh Button */}
-        <Box sx={{ mt: 3, textAlign: 'center' }}>
+        <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Button
             variant="contained"
             startIcon={<Refresh />}
             onClick={loadDashboardData}
             sx={{ 
               borderRadius: 3, 
-              px: 4,
-              py: 1.5,
+              px: 6,
+              py: 2,
               background: 'linear-gradient(135deg, #00A3E0 0%, #0077A3 100%)',
+              boxShadow: '0 4px 20px rgba(0, 163, 224, 0.3)',
               '&:hover': {
                 background: 'linear-gradient(135deg, #0077A3 0%, #005580 100%)',
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
+                transform: 'translateY(-3px)',
+                boxShadow: '0 8px 30px rgba(0, 163, 224, 0.4)',
               },
-              transition: 'all 0.3s ease'
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
           >
             Verileri Yenile

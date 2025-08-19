@@ -3,12 +3,15 @@ package com.turkcellcase4.billing.controller;
 import com.turkcellcase4.billing.dto.BillResponseDTO;
 import com.turkcellcase4.billing.dto.BillItemDTO;
 import com.turkcellcase4.billing.dto.BillSummaryDTO;
+import com.turkcellcase4.billing.dto.CreateBillRequestDTO;
 import com.turkcellcase4.billing.service.BillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.validation.Valid;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,11 +32,11 @@ public class BillController {
         return ResponseEntity.ok(bill);
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping("/user/{userId}/period")
     public ResponseEntity<BillResponseDTO> getBillByUserIdAndPeriod(
             @PathVariable Long userId,
             @RequestParam String period) {
-        log.info("GET /bills/{}?period={} - Getting bill for user and period", userId, period);
+        log.info("GET /bills/user/{}?period={} - Getting bill for user and period", userId, period);
         BillResponseDTO bill = billService.getBillByUserIdAndPeriod(userId, period);
         return ResponseEntity.ok(bill);
     }
@@ -74,5 +77,12 @@ public class BillController {
         log.info("GET /bills/{}/range?startDate={}&endDate={} - Getting bills in date range", userId, startDate, endDate);
         List<BillResponseDTO> bills = billService.getBillsByUserIdAndDateRange(userId, startDate, endDate);
         return ResponseEntity.ok(bills);
+    }
+
+    @PostMapping
+    public ResponseEntity<BillResponseDTO> createBill(@Valid @RequestBody CreateBillRequestDTO request) {
+        log.info("POST /bills - Creating new bill for user: {}", request.getUserId());
+        BillResponseDTO bill = billService.createBill(request);
+        return ResponseEntity.ok(bill);
     }
 }

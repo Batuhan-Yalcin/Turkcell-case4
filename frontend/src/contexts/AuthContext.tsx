@@ -35,10 +35,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = localStorage.getItem('accessToken');
       if (token) {
         try {
-          // Token'ı doğrula ve kullanıcı bilgilerini al
-          const userInfo = await apiService.getUsers();
-          if (userInfo.data.length > 0) {
-            setUser(userInfo.data[0]); // Demo için ilk kullanıcıyı al
+            // Token'ı doğrula ve msisdn'e göre kullanıcıyı çek
+          const storedMsisdn = localStorage.getItem('msisdn');
+          if (storedMsisdn) {
+            const resp = await apiService.getUserByMsisdn(storedMsisdn);
+            setUser(resp.data);
+          } else {
+            const userInfo = await apiService.getUsers();
+            if (userInfo.data.users && userInfo.data.users.length > 0) {
+              setUser(userInfo.data.users[0]);
+            }
           }
         } catch (error) {
           console.error('Token validation failed:', error);
@@ -60,8 +66,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('msisdn', msisdn);
       
-      setUser({ msisdn, role });
+      try {
+        const resp = await apiService.getUserByMsisdn(msisdn);
+        setUser(resp.data);
+      } catch {
+        setUser({ msisdn, role });
+      }
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -78,8 +90,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('msisdn', msisdn);
       
-      setUser({ msisdn, role });
+      try {
+        const resp = await apiService.getUserByMsisdn(msisdn);
+        setUser(resp.data);
+      } catch {
+        setUser({ msisdn, role });
+      }
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;

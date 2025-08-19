@@ -7,6 +7,7 @@ import com.turkcellcase4.billing.repository.BillRepository;
 import com.turkcellcase4.billing.repository.BillItemRepository;
 import com.turkcellcase4.billing.service.ExplainService;
 import com.turkcellcase4.billing.service.UsageService;
+import com.turkcellcase4.billing.service.LLMExplanationService;
 import com.turkcellcase4.catalog.model.PremiumSMS;
 import com.turkcellcase4.catalog.model.VAS;
 import com.turkcellcase4.catalog.repository.PremiumSMSRepository;
@@ -36,6 +37,7 @@ public class ExplainServiceImpl implements ExplainService {
     private final PremiumSMSRepository premiumSMSRepository;
     private final VASRepository vasRepository;
     private final UsageService usageService;
+    private final LLMExplanationService llmExplanationService;
 
     @Override
     public ExplainResponseDTO explainBill(ExplainRequestDTO request) {
@@ -46,7 +48,13 @@ public class ExplainServiceImpl implements ExplainService {
         
         BillSummaryDTO summary = getBillSummary(request.getBillId());
         List<CategoryBreakdownDTO> breakdown = getCategoryBreakdowns(request.getBillId());
+        
+        log.info("Bill items count: {}", breakdown.size());
+        log.info("Breakdown categories: {}", breakdown.stream().map(c -> c.getCategory().name()).collect(Collectors.toList()));
+        
         String naturalLanguageSummary = generateNaturalLanguageSummary(bill, breakdown);
+        
+        log.info("Generated natural language summary: {}", naturalLanguageSummary);
         
         return ExplainResponseDTO.builder()
                 .summary(summary)
@@ -99,9 +107,17 @@ public class ExplainServiceImpl implements ExplainService {
     @Override
     public List<CategoryBreakdownDTO> getCategoryBreakdowns(Long billId) {
         List<BillItem> items = billItemRepository.findByBill_BillId(billId);
+        log.info("Found {} bill items for bill {}", items.size(), billId);
+        
+        if (items.isEmpty()) {
+            log.warn("No bill items found for bill {}", billId);
+            return new ArrayList<>();
+        }
         
         Map<ItemCategory, List<BillItem>> groupedItems = items.stream()
                 .collect(Collectors.groupingBy(BillItem::getCategory));
+        
+        log.info("Grouped items by category: {}", groupedItems.keySet());
         
         return groupedItems.entrySet().stream()
                 .map(entry -> createCategoryBreakdown(entry.getKey(), entry.getValue()))
@@ -449,6 +465,34 @@ public class ExplainServiceImpl implements ExplainService {
     }
 
     private String generateNaturalLanguageSummary(Bill bill, List<CategoryBreakdownDTO> breakdown) {
+        try {
+            // LLM servisini kullanarak AI destekli özet üret
+            String period = bill.getPeriodStart().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            
+            // Ana kategorileri string olarak birleştir
+            String mainCategories = breakdown.stream()
+                    .filter(cat -> cat.getTotal().compareTo(BigDecimal.ZERO) > 0)
+                    .map(cat -> cat.getCategory().name().toLowerCase())
+                    .collect(Collectors.joining(", "));
+            
+            // LLM servisini çağır
+            String aiSummary = llmExplanationService.generateBillAnalysisSummary(
+                bill.getBillId(), 
+                period, 
+                bill.getTotalAmount().doubleValue(), 
+                mainCategories
+            );
+            
+            log.info("AI generated summary: {}", aiSummary);
+            return aiSummary;
+            
+        } catch (Exception e) {
+            log.warn("AI özeti üretilemedi, fallback kullanılıyor: {}", e.getMessage());
+            return generateFallbackSummary(bill, breakdown);
+        }
+    }
+
+    private String generateFallbackSummary(Bill bill, List<CategoryBreakdownDTO> breakdown) {
         StringBuilder summary = new StringBuilder();
         
         // Calculate totals by category

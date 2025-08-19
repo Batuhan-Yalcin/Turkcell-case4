@@ -50,6 +50,8 @@ import {
   Print,
   Share,
   MoreVert,
+  AddCircle,
+  RemoveCircle,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
@@ -66,33 +68,106 @@ const BillsPage: React.FC<BillsPageProps> = () => {
   const [billItems, setBillItems] = useState<BillItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filterPeriod, setFilterPeriod] = useState('2025-02');
+  const [filterPeriod, setFilterPeriod] = useState('');
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    periodStart: '',
+    periodEnd: '',
+    issueDate: '',
+    totalAmount: '',
+    currency: 'TRY',
+  });
+  const [createItems, setCreateItems] = useState([
+    { category: 'DATA', subtype: 'PACKAGE', description: '', amount: '', unitPrice: '', quantity: 1, taxRate: 20 },
+  ] as any[]);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
   useEffect(() => {
-    loadBillsData();
+    loadUsers();
+  }, []);
+
+  useEffect(() => {
+    // Kullanıcı seçildiğinde veya kullanıcı listesi yüklendiğinde faturaları ve dönemleri yükle
+    if (selectedUserId || user?.userId || (availableUsers && availableUsers.length > 0)) {
+      loadBillsData();
+    }
+  }, [selectedUserId, user, availableUsers]);
+
+  useEffect(() => {
+    // Dönem seçimi değiştiğinde faturaları yeniden yükle
+    if (filterPeriod && (selectedUserId || user?.userId || (availableUsers && availableUsers.length > 0))) {
+      loadBillsData();
+    }
   }, [filterPeriod]);
+
+  const loadUsers = async () => {
+    try {
+      const usersResponse = await apiService.getUsers();
+      console.log('Users response:', usersResponse);
+      console.log('Users data structure:', usersResponse.data);
+      console.log('Users array:', usersResponse.data?.users);
+      if (usersResponse.data && usersResponse.data.users && Array.isArray(usersResponse.data.users)) {
+        console.log('First user:', usersResponse.data.users[0]);
+        console.log('First user userId type:', typeof usersResponse.data.users[0].userId);
+        console.log('First user userId value:', usersResponse.data.users[0].userId);
+        setAvailableUsers(usersResponse.data.users);
+        if (usersResponse.data.users.length > 0) {
+          setSelectedUserId(usersResponse.data.users[0].userId);
+        }
+      } else {
+        console.error('Users data is not an array:', usersResponse.data);
+        setAvailableUsers([]);
+      }
+    } catch (err: any) {
+      console.error('Kullanıcılar yüklenemedi:', err);
+      setAvailableUsers([]);
+    }
+  };
 
   const loadBillsData = async () => {
     try {
       setIsLoading(true);
       setError('');
       
-      // Demo user ID: 1001
-      const userId = 1001;
+      // Öncelik: seçilen kullanıcı -> oturum kullanıcısı -> ilk kullanıcı -> 1001 fallback
+      const userId = selectedUserId || user?.userId || availableUsers[0]?.userId || 1001;
+      console.log('[Bills] loadBillsData userId =', userId, { selectedUserId, authUserId: user?.userId, firstAvailable: availableUsers[0]?.userId });
       
       // Load available periods
       const periodsResponse = await apiService.getAvailablePeriods(userId);
+      console.log('[Bills] periodsResponse:', periodsResponse.data);
       setAvailablePeriods(periodsResponse.data);
+      // Varsayılan dönem ayarla (MUI out-of-range hatasını önlemek için)
+      if (!filterPeriod && periodsResponse.data && periodsResponse.data.length > 0) {
+        setFilterPeriod(periodsResponse.data[0]);
+      }
       
-      // Load recent bills
-      const billsResponse = await apiService.getRecentBillsByUserId(userId);
-      setBills(billsResponse.data);
+      // Eğer dönem seçiliyse o döneme ait faturaları çek, yoksa son faturaları çek
+      if (filterPeriod) {
+        try {
+          const periodBillsResponse = await apiService.getBillByUserIdAndPeriod(userId, filterPeriod);
+          console.log('[Bills] period bills:', periodBillsResponse.data);
+          setBills([periodBillsResponse.data]);
+        } catch (err) {
+          console.log('[Bills] No bills for period, loading recent bills');
+          const billsResponse = await apiService.getRecentBillsByUserId(userId);
+          console.log('[Bills] recent bills count =', billsResponse.data?.length);
+          setBills(billsResponse.data);
+        }
+      } else {
+        // Load recent bills
+        const billsResponse = await apiService.getRecentBillsByUserId(userId);
+        console.log('[Bills] recent bills count =', billsResponse.data?.length);
+        setBills(billsResponse.data);
+      }
       
     } catch (err: any) {
       setError(err.response?.data?.message || 'Fatura verileri yüklenirken bir hata oluştu');
+      console.error('[Bills] loadBillsData error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -286,6 +361,21 @@ const BillsPage: React.FC<BillsPageProps> = () => {
             >
               Filtrele
             </Button>
+
+            <Button
+              variant="contained"
+              startIcon={<AddCircle />}
+              onClick={() => setShowCreateDialog(true)}
+              sx={{
+                borderRadius: 2,
+                background: 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #1b5e20 0%, #104517 100%)',
+                },
+              }}
+            >
+              Fatura Ekle
+            </Button>
           </Box>
         </Paper>
 
@@ -425,14 +515,14 @@ const BillsPage: React.FC<BillsPageProps> = () => {
                           Toplam Tutar
                         </Typography>
                       </Box>
-                      <Box sx={{ p: 2, bgcolor: 'warning.50', borderRadius: 2, textAlign: 'center' }}>
-                        <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                          ₺{billDetails.taxAmount || 0}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Vergi
-                        </Typography>
-                      </Box>
+                                              <Box sx={{ p: 2, bgcolor: 'warning.50', borderRadius: 2, textAlign: 'center' }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
+                            ₺{billDetails.taxes || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Vergi
+                          </Typography>
+                        </Box>
                       <Box sx={{ p: 2, bgcolor: 'success.50', borderRadius: 2, textAlign: 'center' }}>
                         <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
                           {billDetails.itemCount || 0}
@@ -520,6 +610,199 @@ const BillsPage: React.FC<BillsPageProps> = () => {
               }}
             >
               İndir
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Create Bill Dialog */}
+        <Dialog
+          open={showCreateDialog}
+          onClose={() => setShowCreateDialog(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>Yeni Fatura Ekle</DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2, mb: 3 }}>
+              <FormControl fullWidth>
+                <InputLabel>Kullanıcı Seçin</InputLabel>
+                <Select
+                  label="Kullanıcı Seçin"
+                  value={selectedUserId || ''}
+                  onChange={(e) => {
+                    console.log('Selected user ID:', e.target.value);
+                    setSelectedUserId(Number(e.target.value));
+                  }}
+                >
+                  {availableUsers.length > 0 ? (
+                    availableUsers.map((user) => (
+                      <MenuItem key={user.userId} value={user.userId}>
+                        {user.name} ({user.msisdn})
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled>Kullanıcı bulunamadı</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mb: 3 }}>
+              <TextField
+                label="Dönem Başlangıç (yyyy-MM-dd)"
+                value={createForm.periodStart}
+                onChange={(e) => setCreateForm({ ...createForm, periodStart: e.target.value })}
+                placeholder="2025-02-01"
+                fullWidth
+              />
+              <TextField
+                label="Dönem Bitiş (yyyy-MM-dd)"
+                value={createForm.periodEnd}
+                onChange={(e) => setCreateForm({ ...createForm, periodEnd: e.target.value })}
+                placeholder="2025-02-28"
+                fullWidth
+              />
+              <TextField
+                label="Fatura Tarihi (yyyy-MM-dd)"
+                value={createForm.issueDate}
+                onChange={(e) => setCreateForm({ ...createForm, issueDate: e.target.value })}
+                placeholder="2025-03-01"
+                fullWidth
+              />
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mb: 3 }}>
+              <TextField
+                label="Toplam Tutar"
+                type="number"
+                value={createForm.totalAmount}
+                onChange={(e) => setCreateForm({ ...createForm, totalAmount: e.target.value })}
+                placeholder="349.90"
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Para Birimi</InputLabel>
+                <Select
+                  label="Para Birimi"
+                  value={createForm.currency}
+                  onChange={(e) => setCreateForm({ ...createForm, currency: e.target.value as string })}
+                >
+                  <MenuItem value="TRY">TRY</MenuItem>
+                  <MenuItem value="USD">USD</MenuItem>
+                  <MenuItem value="EUR">EUR</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Divider sx={{ my: 2 }}>Kalemler</Divider>
+
+            {createItems.map((it, idx) => (
+              <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(6, 1fr)' }, gap: 1.5, mb: 2, alignItems: 'center' }}>
+                <FormControl fullWidth>
+                  <InputLabel>Kategori</InputLabel>
+                  <Select
+                    label="Kategori"
+                    value={it.category}
+                    onChange={(e) => {
+                      const arr = [...createItems];
+                      arr[idx].category = e.target.value as string;
+                      setCreateItems(arr);
+                    }}
+                  >
+                    {['DATA','VOICE','SMS','ROAMING','PREMIUM_SMS','VAS','ONE_OFF','TAX'].map((cat) => (
+                      <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Alt Tip"
+                  value={it.subtype}
+                  onChange={(e) => { const arr = [...createItems]; arr[idx].subtype = e.target.value; setCreateItems(arr); }}
+                  fullWidth
+                />
+                <TextField
+                  label="Açıklama"
+                  value={it.description}
+                  onChange={(e) => { const arr = [...createItems]; arr[idx].description = e.target.value; setCreateItems(arr); }}
+                  fullWidth
+                />
+                <TextField
+                  label="Birim Fiyat"
+                  type="number"
+                  value={it.unitPrice}
+                  onChange={(e) => { const arr = [...createItems]; arr[idx].unitPrice = e.target.value; setCreateItems(arr); }}
+                  fullWidth
+                />
+                <TextField
+                  label="Miktar"
+                  type="number"
+                  value={it.quantity}
+                  onChange={(e) => { const arr = [...createItems]; arr[idx].quantity = Number(e.target.value); setCreateItems(arr); }}
+                  fullWidth
+                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    label="Vergi %"
+                    type="number"
+                    value={it.taxRate}
+                    onChange={(e) => { const arr = [...createItems]; arr[idx].taxRate = Number(e.target.value); setCreateItems(arr); }}
+                    fullWidth
+                  />
+                  <IconButton color="error" onClick={() => setCreateItems(createItems.filter((_, i) => i !== idx))}>
+                    <RemoveCircle />
+                  </IconButton>
+                </Box>
+              </Box>
+            ))}
+
+            <Button
+              startIcon={<AddCircle />}
+              onClick={() => setCreateItems([...createItems, { category: 'DATA', subtype: 'PACKAGE', description: '', amount: '', unitPrice: '', quantity: 1, taxRate: 20 }])}
+              sx={{ mb: 2 }}
+            >
+              Kalem Ekle
+            </Button>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowCreateDialog(false)}>İptal</Button>
+            <Button
+              variant="contained"
+              onClick={async () => {
+                try {
+                  if (!selectedUserId) {
+                    setError('Lütfen bir kullanıcı seçin');
+                    return;
+                  }
+                  const userId = selectedUserId;
+                  const items = createItems.map((it) => ({
+                    category: it.category,
+                    subtype: it.subtype || 'PACKAGE',
+                    description: it.description || 'Kalem',
+                    unitPrice: Number(it.unitPrice) || 0,
+                    quantity: Number(it.quantity) || 1,
+                    amount: Number(it.unitPrice) * (Number(it.quantity) || 1),
+                    taxRate: it.taxRate ? Number(it.taxRate) : 0,
+                  }));
+                  const total = items.reduce((s, i) => s + (i.amount || 0), 0);
+                  const payload = {
+                    userId,
+                    periodStart: createForm.periodStart,
+                    periodEnd: createForm.periodEnd,
+                    issueDate: createForm.issueDate,
+                    totalAmount: Number(createForm.totalAmount) || total,
+                    currency: createForm.currency,
+                    billItems: items,
+                  } as any;
+                  await apiService.createBill(payload);
+                  setShowCreateDialog(false);
+                  setCreateForm({ periodStart: '', periodEnd: '', issueDate: '', totalAmount: '', currency: 'TRY' });
+                  setCreateItems([{ category: 'DATA', subtype: 'PACKAGE', description: '', amount: '', unitPrice: '', quantity: 1, taxRate: 20 }] as any[]);
+                  // Aynı kullanıcı için listeyi yenile
+                  await loadBillsData();
+                } catch (err: any) {
+                  setError(err.response?.data?.message || 'Fatura oluşturulamadı');
+                }
+              }}
+            >
+              Kaydet
             </Button>
           </DialogActions>
         </Dialog>

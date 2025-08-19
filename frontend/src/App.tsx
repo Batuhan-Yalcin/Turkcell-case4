@@ -10,6 +10,8 @@ import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import BillsPage from './pages/Bills/BillsPage';
+import AnomaliesPage from './pages/Anomalies/AnomaliesPage';
+import ExplainPage from './pages/Explain/ExplainPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,6 +74,22 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <BillsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/anomalies"
+        element={
+          <ProtectedRoute>
+            <AnomaliesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/explain"
+        element={
+          <ProtectedRoute>
+            <ExplainPage />
           </ProtectedRoute>
         }
       />

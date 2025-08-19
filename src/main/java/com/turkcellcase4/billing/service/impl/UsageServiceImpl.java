@@ -297,8 +297,14 @@ public class UsageServiceImpl implements UsageService {
     }
 
     private LocalDate parsePeriodToStartDate(String period) {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
-        return LocalDate.parse(period + "-01", formatter);
+        try {
+            // Period formatı "yyyy-MM" şeklinde geliyor, "-01" ekleyerek tam tarih yapıyoruz
+            String fullDate = period + "-01";
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            return LocalDate.parse(fullDate, formatter);
+        } catch (Exception e) {
+            throw new BusinessLogicException("Geçersiz period formatı: " + period + ". Beklenen format: yyyy-MM");
+        }
     }
 
     private <T extends Number> String analyzeTrend(List<UsageDaily> usageData, java.util.function.Function<UsageDaily, T> extractor) {

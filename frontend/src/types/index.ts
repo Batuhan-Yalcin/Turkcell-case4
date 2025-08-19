@@ -27,7 +27,7 @@ export interface RegisterResponse {
 
 // User Types
 export interface User {
-  id: number;
+  userId: number;
   name: string;
   msisdn: string;
   type: 'INDIVIDUAL' | 'CORPORATE';
@@ -61,10 +61,31 @@ export interface BillItem {
   createdAt: string;
 }
 
+// Create Bill Types
+export interface CreateBillItemRequest {
+  category: string;
+  subtype: string;
+  description: string;
+  amount: number;
+  unitPrice: number;
+  quantity: number;
+  taxRate?: number;
+}
+
+export interface CreateBillRequest {
+  userId: number;
+  periodStart: string; // yyyy-MM-dd
+  periodEnd: string;   // yyyy-MM-dd
+  issueDate: string;   // yyyy-MM-dd
+  totalAmount: number;
+  currency: string;
+  billItems: CreateBillItemRequest[];
+}
+
 export interface BillSummary {
   billId: number;
   totalAmount: number;
-  taxAmount: number;
+  taxes: number;
   netAmount: number;
   itemCount: number;
   categoryBreakdown: CategoryBreakdown[];
@@ -75,8 +96,10 @@ export interface BillSummary {
 
 export interface CategoryBreakdown {
   category: string;
-  amount: number;
+  total: number;
   percentage: number;
+  explanation?: string;
+  lines?: BillItem[];
 }
 
 // Catalog Types - Backend DTO'lara uygun
@@ -144,6 +167,14 @@ export interface Anomaly {
 export interface AnomalyRequest {
   userId: number;
   period: string;
+}
+
+export interface AnomalyResponse {
+  anomalies: Anomaly[];
+  totalAnomalies: number;
+  period: string;
+  userId: number;
+  anomalySummary: Record<string, number>;
 }
 
 // Usage Types - Backend DTO'lara uygun

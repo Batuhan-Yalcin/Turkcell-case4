@@ -15,13 +15,13 @@ public interface BillRepository extends JpaRepository<Bill, Long> {
 	
 	List<Bill> findByUser_UserIdAndPeriodStartBetween(Long userId, LocalDate start, LocalDate end);
 	
-	@Query("SELECT b FROM Bill b WHERE b.user.userId = :userId AND b.periodStart >= :startDate")
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.user WHERE b.user.userId = :userId AND b.periodStart >= :startDate")
 	List<Bill> findRecentBillsByUserId(@Param("userId") Long userId, @Param("startDate") LocalDate startDate);
 	
-	@Query("SELECT b FROM Bill b WHERE b.user.userId = :userId AND FUNCTION('YEAR', b.periodStart) = :year AND FUNCTION('MONTH', b.periodStart) = :month")
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.user WHERE b.user.userId = :userId AND EXTRACT(YEAR FROM b.periodStart) = :year AND EXTRACT(MONTH FROM b.periodStart) = :month")
 	Optional<Bill> findByUserIdAndPeriod(@Param("userId") Long userId, @Param("year") int year, @Param("month") int month);
 	
-	@Query("SELECT b FROM Bill b WHERE b.user.userId = :userId ORDER BY b.periodStart DESC")
+	@Query("SELECT b FROM Bill b LEFT JOIN FETCH b.user WHERE b.user.userId = :userId ORDER BY b.periodStart DESC")
 	List<Bill> findAllByUserIdOrderByPeriodStartDesc(@Param("userId") Long userId);
 	
 	// N+1 sorgu problemlerini çözmek için batch query'ler

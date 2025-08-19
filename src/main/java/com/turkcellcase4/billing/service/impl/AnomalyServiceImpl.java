@@ -36,7 +36,7 @@ public class AnomalyServiceImpl implements AnomalyService {
             List<AnomalyDTO> anomalies = new ArrayList<>();
             
             // Parse period
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             LocalDate periodDate = LocalDate.parse(request.getPeriod() + "-01", formatter);
             
             // Get current month bill

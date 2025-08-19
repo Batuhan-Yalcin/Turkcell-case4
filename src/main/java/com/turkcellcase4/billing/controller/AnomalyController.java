@@ -26,6 +26,16 @@ public class AnomalyController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping
+    public ResponseEntity<AnomalyResponseDTO> getAnomalies(@RequestParam Long userId, @RequestParam String period) {
+        log.info("GET /anomalies - Getting anomalies for user: {} and period: {}", userId, period);
+        AnomalyRequestDTO request = new AnomalyRequestDTO();
+        request.setUserId(userId);
+        request.setPeriod(period);
+        AnomalyResponseDTO response = anomalyService.detectAnomalies(request);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{userId}/history")
     public ResponseEntity<AnomalyResponseDTO> getAnomalyHistory(@PathVariable Long userId) {
         log.info("GET /anomalies/{}/history - Getting anomaly history", userId);
