@@ -47,15 +47,9 @@ const menuItems = [
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
-    text: 'Katalog',
-    icon: <Store />,
-    path: '/catalog',
-    roles: ['ROLE_USER', 'ROLE_ADMIN'],
-  },
-  {
-    text: 'Kullanım Analizi',
+    text: 'AI Fatura Analizi',
     icon: <Analytics />,
-    path: '/usage',
+    path: '/explain',
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
@@ -65,13 +59,13 @@ const menuItems = [
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
-    text: 'AI Fatura Analizi',
-    icon: <Analytics />,
-    path: '/explain',
+    text: 'Hizmet Kataloğu',
+    icon: <Store />,
+    path: '/catalog',
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
-    text: 'Plan Karşılaştırma',
+    text: 'Plan Simülasyonu',
     icon: <CompareArrows />,
     path: '/simulation',
     roles: ['ROLE_USER', 'ROLE_ADMIN'],
@@ -80,7 +74,13 @@ const menuItems = [
     text: 'Sipariş Yönetimi',
     icon: <ShoppingCart />,
     path: '/checkout',
-    roles: ['ROLE_ADMIN'],
+    roles: ['ROLE_USER', 'ROLE_ADMIN'],
+  },
+  {
+    text: 'Kullanım Analizi',
+    icon: <Analytics />,
+    path: '/usage',
+    roles: ['ROLE_USER', 'ROLE_ADMIN'],
   },
   {
     text: 'Raporlar',

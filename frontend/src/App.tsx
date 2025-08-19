@@ -12,6 +12,9 @@ import DashboardPage from './pages/Dashboard/DashboardPage';
 import BillsPage from './pages/Bills/BillsPage';
 import AnomaliesPage from './pages/Anomalies/AnomaliesPage';
 import ExplainPage from './pages/Explain/ExplainPage';
+import CatalogPage from './pages/Catalog/CatalogPage';
+import SimulationPage from './pages/Simulation/SimulationPage';
+import CheckoutPage from './pages/Checkout/CheckoutPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -90,6 +93,30 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <ExplainPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/catalog"
+        element={
+          <ProtectedRoute>
+            <CatalogPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/simulation"
+        element={
+          <ProtectedRoute>
+            <SimulationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checkout"
+        element={
+          <ProtectedRoute>
+            <CheckoutPage />
           </ProtectedRoute>
         }
       />

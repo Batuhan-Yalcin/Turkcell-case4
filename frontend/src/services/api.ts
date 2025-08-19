@@ -195,8 +195,24 @@ class ApiService {
     return this.api.post('/whatif/simulate', request);
   }
 
+  async getSimulationScenarios(): Promise<AxiosResponse<any>> {
+    return this.api.get('/whatif/1/scenarios');
+  }
+
+  async runSimulation(request: SimulationRequest): Promise<AxiosResponse<any>> {
+    return this.api.post('/whatif', request);
+  }
+
   // Checkout Services
   async checkout(request: CheckoutRequest): Promise<AxiosResponse<CheckoutResponse>> {
+    return this.api.post('/checkout', request);
+  }
+
+  async getCartItems(): Promise<AxiosResponse<any>> {
+    return this.api.get('/checkout/cart');
+  }
+
+  async processCheckout(request: CheckoutRequest): Promise<AxiosResponse<any>> {
     return this.api.post('/checkout', request);
   }
 
